@@ -1,0 +1,16 @@
+[
+  {
+    "full_name": "langchain-ai/langgraph",
+    "description": "Build resilient language agents as graphs.",
+    "stargazers_count": 8500,
+    "language": "Python",
+    "html_url": "https://github.com/langchain-ai/langgraph"
+  },
+  {
+    "full_name": "modelcontextprotocol/python-sdk",
+    "description": "The official Python SDK for Model Context Protocol servers and clients.",
+    "stargazers_count": 3200,
+    "language": "Python",
+    "html_url": "https://github.com/modelcontextprotocol/python-sdk"
+  }
+]

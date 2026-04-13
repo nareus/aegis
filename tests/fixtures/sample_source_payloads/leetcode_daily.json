@@ -1,0 +1,18 @@
+{
+  "data": {
+    "activeDailyCodingChallengeQuestion": {
+      "date": "2026-04-13",
+      "link": "/problems/two-sum/",
+      "question": {
+        "questionId": "1",
+        "title": "Two Sum",
+        "titleSlug": "two-sum",
+        "difficulty": "Easy",
+        "topicTags": [
+          {"name": "Array"},
+          {"name": "Hash Table"}
+        ]
+      }
+    }
+  }
+}

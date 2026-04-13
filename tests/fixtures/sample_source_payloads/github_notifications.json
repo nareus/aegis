@@ -1,0 +1,18 @@
+[
+  {
+    "id": "1",
+    "repository": {"full_name": "narenarya3/aegis"},
+    "subject": {"title": "Fix health endpoint", "type": "PullRequest"},
+    "reason": "review_requested",
+    "updated_at": "2026-04-13T08:00:00Z",
+    "unread": true
+  },
+  {
+    "id": "2",
+    "repository": {"full_name": "narenarya3/flightdeck"},
+    "subject": {"title": "Bump dependencies", "type": "Issue"},
+    "reason": "subscribed",
+    "updated_at": "2026-04-12T18:00:00Z",
+    "unread": false
+  }
+]
