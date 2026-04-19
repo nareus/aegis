@@ -1,0 +1,16 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+tests/
+.env
+.env.*
+!.env.example
+*.md
+!README.md
+.git
+.gitignore
+fly.toml
+docker-compose.yml
