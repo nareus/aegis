@@ -24,9 +24,9 @@ class Settings(BaseSettings):
 
     # Data sources
     github_token: str = ""
-    github_username: str = "narenarya3"
-    leetcode_username: str = ""       # your LeetCode username (e.g. narenarya3)
-    leetcode_session: str = ""        # LEETCODE_SESSION cookie for submission history
+    github_username: str = ""
+    leetcode_username: str = ""
+    leetcode_session: str = ""
 
     # Infrastructure
     database_url: str = "postgresql://aegis:aegis@localhost:5432/aegis"
@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # Scheduler
     aegis_briefing_cron: str = "0 7 * * *"
     aegis_timezone: str = "Asia/Singapore"
+
+    # ── Derived properties ───────────────────────────────────────────────────
 
     @property
     def is_production(self) -> bool:
@@ -50,11 +52,36 @@ class Settings(BaseSettings):
 
     @property
     def preferred_locations_list(self) -> list[str]:
-        return [l.strip() for l in self.aegis_profile_preferred_locations.split(",") if l.strip()]
+        return [loc.strip() for loc in self.aegis_profile_preferred_locations.split(",") if loc.strip()]
 
     @property
     def deal_breakers_list(self) -> list[str]:
         return [d.strip() for d in self.aegis_profile_deal_breakers.split(",") if d.strip()]
+
+    # ── Validation helpers ───────────────────────────────────────────────────
+
+    def check(self) -> list[str]:
+        """Return a list of warning strings for missing/placeholder config values.
+
+        Call at startup to surface problems early instead of failing mid-request.
+        Empty list means everything required is set.
+        """
+        warnings: list[str] = []
+
+        _PLACEHOLDER_PREFIXES = ("sk-ant-", "ghp_", "your-")
+
+        def _missing(value: str, label: str, required: bool = True) -> None:
+            if not value or any(value.startswith(p) for p in _PLACEHOLDER_PREFIXES):
+                prefix = "REQUIRED" if required else "optional"
+                warnings.append(f"  [{prefix}] {label} is not set")
+
+        _missing(self.anthropic_api_key, "ANTHROPIC_API_KEY")
+        _missing(self.github_token, "GITHUB_TOKEN", required=False)
+        _missing(self.github_username, "GITHUB_USERNAME", required=False)
+        _missing(self.leetcode_username, "LEETCODE_USERNAME", required=False)
+        _missing(self.leetcode_session, "LEETCODE_SESSION", required=False)
+
+        return warnings
 
 
 settings = Settings()

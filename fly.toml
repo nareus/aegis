@@ -1,0 +1,70 @@
+# fly.toml -- Aegis deployment on Fly.io
+# Deploy:  fly deploy
+# Secrets: fly secrets set ANTHROPIC_API_KEY=... GITHUB_TOKEN=... etc.
+
+app = "aegis"
+primary_region = "sin"   # Singapore -- closest to target location
+
+[build]
+  dockerfile = "Dockerfile"
+
+# ── API process (main) ──────────────────────────────────────────────────────
+[processes]
+  api = "api"
+  scheduler = "worker"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8000
+  processes = ["api"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+
+# ── Compute ─────────────────────────────────────────────────────────────────
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  processes = ["api"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  processes = ["scheduler"]
+
+# ── Environment (non-secret) ─────────────────────────────────────────────────
+[env]
+  AEGIS_ENV = "prod"
+  LOG_LEVEL = "INFO"
+  AEGIS_TIMEZONE = "Asia/Singapore"
+  AEGIS_BRIEFING_CRON = "0 7 * * *"
+  AEGIS_LLM_MODEL = "claude-sonnet-4-5"
+  AEGIS_LLM_MAX_COST_USD_PER_RUN = "0.50"
+  GITHUB_USERNAME = "narenarya3"
+
+# ── Secrets to set via `fly secrets set` ────────────────────────────────────
+# fly secrets set \
+#   ANTHROPIC_API_KEY="sk-ant-..." \
+#   GITHUB_TOKEN="ghp_..." \
+#   LEETCODE_SESSION="..." \
+#   DATABASE_URL="postgresql://..." \
+#   REDIS_URL="redis://..."

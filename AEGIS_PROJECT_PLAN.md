@@ -1,10 +1,16 @@
-# Aegis -- MCP-Native Agentic Platform for SWE Workflows
+# Aegis -- MCP-Native Agentic Platform for SWE Career Growth
 
 ## Project overview
 
-Aegis is a personal agent platform that exposes SWE-specific autonomous agents as MCP (Model Context Protocol) tools, resources, and prompts. Any MCP client (Claude Code, Cursor, Claude Desktop, or a custom Telegram bot) can interact with the agents. The platform uses LangGraph for agent orchestration with durable checkpointing, parallel execution, and self-evaluation loops.
+Aegis is a personal agent platform that helps you become a better backend/AI engineer and land the right job. It exposes autonomous agents as MCP (Model Context Protocol) tools, resources, and prompts so any MCP client (Claude Desktop, Claude Code, Cursor) can interact with them.
 
-The first agent is the **Daily Briefing Agent**, which aggregates data from GitHub, LeetCode, Hacker News, and a job application tracker, then uses LLM-driven prioritization and synthesis to deliver a personalized daily briefing.
+**Three core capabilities:**
+
+1. **Job Tracker** -- Add jobs from LinkedIn URLs or pasted JDs. LLM parses the posting, scores fit against your profile, identifies skill gaps, and tracks application status with follow-up reminders.
+2. **LeetCode Tracker** -- Track solved problems by pattern (DP, graphs, sliding window, etc.), identify weak areas, get recommendations on what to practice next.
+3. **Interview Prep Agent** -- Mock system design and behavioral questions tailored to your weak areas and target companies. Tracks readiness per company.
+
+The **Daily Briefing Agent** ties everything together as a personal dashboard: stale applications, LeetCode gaps, upcoming interviews, plus a small section for GitHub activity and one relevant HN story.
 
 ## Tech stack
 
@@ -13,10 +19,9 @@ The first agent is the **Daily Briefing Agent**, which aggregates data from GitH
 - **MCP server**: FastMCP (Python MCP SDK) with stdio transport for Claude Desktop/Code
 - **LLM provider**: Anthropic Claude API (direct SDK, no LangChain wrappers)
 - **API layer**: FastAPI (health checks, manual triggers, cron target)
-- **State persistence**: PostgreSQL 16 (briefing runs, job tracker, LangGraph checkpoints)
+- **State persistence**: PostgreSQL 16 (job tracker, LeetCode progress, briefing runs, LangGraph checkpoints)
 - **Caching**: Redis 7 (API response caching, rate limit tracking)
 - **Scheduling**: APScheduler (cron-triggered agent runs)
-- **Delivery**: Telegram Bot API (v0.2 -- thin MCP client that calls Aegis server)
 - **Testing**: pytest + pytest-asyncio + testcontainers-python (Postgres, Redis)
 - **Logging**: Loguru (JSON output in prod, human-readable locally)
 - **Database access**: Raw asyncpg with numbered SQL migrations
@@ -26,29 +31,38 @@ The first agent is the **Daily Briefing Agent**, which aggregates data from GitH
 
 ### Layer 1: MCP server (the public interface)
 
-Aegis exposes all functionality through MCP primitives. This is the only external interface.
+**Job Tracker tools:**
+- `add_job(url_or_text)` -- Parse a LinkedIn URL or pasted JD, LLM extracts structured data, scores fit against profile, saves to tracker
+- `list_jobs(status?)` -- List tracked jobs, optionally filtered by status
+- `update_job(job_id, status, notes?)` -- Update application status
+- `get_follow_ups()` -- List stale applications needing follow-up (no activity 7+ days)
+- `get_job(job_id)` -- Get full details including fit score, gaps, prep notes
 
-**Tools** (actions clients can invoke):
-- `run_briefing()` -- Trigger a fresh daily briefing run, returns run_id and status
-- `get_latest_briefing()` -- Return the most recent successful briefing (markdown + metadata)
-- `get_briefing_run(run_id)` -- Fetch a specific past run by ID
-- `list_recent_runs(limit)` -- List recent runs with run_id, timestamp, quality_score, cost
-- `add_job_application(company, role, url, status)` -- Track a new job application (v0.2)
-- `update_job_status(app_id, new_status, notes)` -- Update an application status (v0.2)
-- `get_follow_up_reminders()` -- List applications that need follow-up (v0.2)
-- `get_agent_status()` -- Health check for all registered agents (v0.2)
+**LeetCode Tracker tools:**
+- `log_problem(title_slug, difficulty, patterns, solved)` -- Log a solved/attempted problem
+- `get_progress()` -- Progress summary by pattern with weak areas highlighted
+- `suggest_next()` -- LLM recommends next problem to practice based on gaps
 
-**Resources** (read-only data):
+**Interview Prep tools:**
+- `mock_system_design(company?, topic?)` -- Generate a system design question tailored to target company/weak areas
+- `mock_behavioral(company?)` -- Generate a behavioral question with STAR framework guidance
+- `evaluate_answer(question, answer)` -- LLM evaluates your answer with specific feedback
+- `get_readiness(company?)` -- Readiness score for a company based on prep done
+
+**Briefing tools:**
+- `run_briefing()` -- Trigger a fresh daily briefing
+- `get_latest_briefing()` -- Return the most recent briefing
+- `list_recent_runs(limit)` -- List recent runs
+
+**Resources:**
 - `briefing://latest` -- Most recent briefing as markdown
-- `briefing://run/{run_id}` -- Specific run as markdown
-- `aegis://jobs/dashboard` -- Job application statuses (v0.2)
-- `aegis://jobs/reminders` -- Stale applications needing follow-up (v0.2)
-- `aegis://agents/runs` -- Recent agent run history with costs (v0.2)
+- `aegis://jobs/dashboard` -- Job application statuses, fit scores
+- `aegis://jobs/reminders` -- Stale applications needing follow-up
+- `aegis://leetcode/progress` -- Progress by pattern, weak areas
+- `aegis://interview/readiness` -- Per-company readiness scores
 
-**Prompts** (reusable templates):
+**Prompts:**
 - `morning_standup()` -- "Give me my daily briefing and tell me what to focus on first."
-- `system_design_question(topic, level)` -- Generate a system design question (v0.2)
-- `resume_bullet_review(bullet)` -- Critique a resume bullet (v0.2)
 
 **Claude Desktop config** (stdio transport):
 ```json
@@ -64,58 +78,174 @@ Aegis exposes all functionality through MCP primitives. This is the only externa
 
 ### Layer 2: Agent runtime (LangGraph)
 
-Each agent is a LangGraph StateGraph. The platform provides shared infrastructure:
-
-- **BriefingService**: Single entry point for all trigger paths (MCP, API, scheduler)
-- **Scheduler**: APScheduler runs agents on cron schedules with timezone support
-- **LangGraph checkpointing**: PostgreSQL-backed `AsyncPostgresSaver` for durable execution
-- **Source clients**: Manage external API auth, caching (Redis), rate limits, and retry logic
+- **BriefingService**: Single entry point for daily briefing runs
+- **JobAnalyzer**: LLM-powered JD parsing and fit scoring
+- **InterviewPrepAgent**: Multi-turn mock interview sessions (v0.2)
+- **Scheduler**: APScheduler runs briefing on cron schedule
+- **LangGraph checkpointing**: PostgreSQL-backed `AsyncPostgresSaver`
 - **LLM Gateway**: Direct Anthropic SDK wrapper with cost tracking and budget caps
 
 ### Layer 3: Infrastructure
 
-- PostgreSQL 16: Briefing runs, LangGraph checkpoints, job tracker (v0.2)
-- Redis 7: API response caching (GitHub, HN), rate limit counters
+- PostgreSQL 16: Job tracker, LeetCode progress, briefing runs, LangGraph checkpoints
+- Redis 7: API response caching, rate limit counters
 - Docker Compose: One-command local setup
-- Fly.io: Production deployment (app + Postgres + Upstash Redis)
+- Fly.io: Production deployment
 
-## Daily Briefing Agent -- detailed design
+## User profile
 
-### State schema
+Stored in config, used by LLM to score job fit and tailor interview prep:
 
-```python
-from typing import TypedDict
-
-class BriefingState(TypedDict):
-    run_id: str
-    triggered_at: str
-    trigger_source: str                  # "cron" | "mcp" | "api"
-
-    # Raw fetched data, keyed by source name
-    raw: dict[str, dict | None]          # {"github": {...}, "hn": [...], "leetcode": {...}}
-    fetch_errors: dict[str, str]         # {"leetcode": "429 rate limit"}
-
-    # LLM outputs
-    prioritized: dict | None
-    briefing_markdown: str | None
-    quality_score: float | None
-    iterations: int
-
-    # Bookkeeping
-    total_cost_usd: float
-    total_latency_ms: int
+```bash
+# --- Profile (used for job fit scoring and interview prep) ---
+AEGIS_PROFILE_SKILLS=python,golang,distributed-systems,postgresql,redis,docker,kubernetes,fastapi,async-programming,system-design
+AEGIS_PROFILE_TARGET_ROLES=backend-engineer,platform-engineer,ai-engineer
+AEGIS_PROFILE_EXPERIENCE_YEARS=3
+AEGIS_PROFILE_PREFERRED_LOCATIONS=singapore,remote
+AEGIS_PROFILE_DEAL_BREAKERS=php,wordpress
 ```
 
-### Graph topology
+## Database schema
+
+### job_applications
+```sql
+CREATE TABLE job_applications (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company         TEXT NOT NULL,
+    role            TEXT NOT NULL,
+    url             TEXT,
+    source_text     TEXT,                       -- raw JD text for reference
+    status          TEXT NOT NULL DEFAULT 'saved',  -- saved|applied|screening|interviewing|offer|rejected|withdrawn
+    fit_score       REAL,                       -- 0.0-1.0 LLM-assessed fit
+    fit_analysis    JSONB,                      -- {"matching_skills": [...], "missing_skills": [...], "notes": "..."}
+    tech_stack      TEXT[],                     -- extracted from JD
+    salary_range    TEXT,
+    location        TEXT,
+    remote          BOOLEAN,
+    notes           TEXT,
+    applied_date    TIMESTAMPTZ,
+    last_activity   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_jobs_status ON job_applications(status);
+CREATE INDEX idx_jobs_last_activity ON job_applications(last_activity);
+CREATE INDEX idx_jobs_fit_score ON job_applications(fit_score DESC);
+```
+
+### leetcode_problems
+```sql
+CREATE TABLE leetcode_problems (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title           TEXT NOT NULL,
+    title_slug      TEXT NOT NULL UNIQUE,
+    difficulty      TEXT NOT NULL,              -- Easy|Medium|Hard
+    patterns        TEXT[] NOT NULL,            -- ["dynamic-programming", "arrays", "hash-table"]
+    url             TEXT,
+    solved          BOOLEAN NOT NULL DEFAULT false,
+    attempts        INTEGER NOT NULL DEFAULT 1,
+    time_complexity TEXT,                       -- user's solution complexity
+    notes           TEXT,                       -- what you learned
+    solved_at       TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_leetcode_patterns ON leetcode_problems USING GIN(patterns);
+CREATE INDEX idx_leetcode_difficulty ON leetcode_problems(difficulty);
+CREATE INDEX idx_leetcode_solved ON leetcode_problems(solved);
+```
+
+### interview_sessions (v0.2)
+```sql
+CREATE TABLE interview_sessions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id          UUID REFERENCES job_applications(id),
+    session_type    TEXT NOT NULL,              -- system-design|behavioral
+    question        TEXT NOT NULL,
+    answer          TEXT,
+    feedback        TEXT,
+    score           REAL,                       -- 0.0-1.0
+    weak_areas      TEXT[],                     -- identified gaps
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+### briefing_runs
+```sql
+CREATE TABLE briefing_runs (
+    run_id          UUID PRIMARY KEY,
+    triggered_at    TIMESTAMPTZ NOT NULL,
+    trigger_source  TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    briefing_md     TEXT,
+    quality_score   REAL,
+    iterations      INTEGER NOT NULL DEFAULT 1,
+    sources_ok      TEXT[] NOT NULL DEFAULT '{}',
+    sources_failed  JSONB NOT NULL DEFAULT '{}',
+    total_cost_usd  NUMERIC(10, 6) NOT NULL DEFAULT 0,
+    total_latency_ms INTEGER,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+### briefing_latest
+```sql
+CREATE TABLE briefing_latest (
+    id      INTEGER PRIMARY KEY CHECK (id = 1),
+    run_id  UUID NOT NULL REFERENCES briefing_runs(run_id),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+LangGraph checkpointer owns its own tables via `AsyncPostgresSaver.setup()`.
+
+## Daily Briefing Agent -- redesigned
+
+The briefing now pulls primarily from **your own data**, not just external feeds.
+
+### Data sources for briefing
+
+1. **Job tracker** (internal DB): stale applications, recent status changes, top-fit jobs not yet applied to
+2. **LeetCode progress** (internal DB): weak patterns, streak status, suggested next problem
+3. **Interview readiness** (internal DB): upcoming interviews, prep gaps per company
+4. **GitHub** (external API): notifications, recent activity
+5. **Hacker News** (external API): 1-3 relevant stories (small section, not the focus)
+
+### Briefing sections
+
+```markdown
+## Action Required
+- 3 applications with no activity in 7+ days [follow up]
+- Interview with Stripe in 2 days -- no system design prep done yet
+
+## Job Search
+- 2 new high-fit jobs added this week (Stripe: 0.9, Datadog: 0.85)
+- Gap alert: 3 jobs require Kafka experience -- consider learning
+
+## LeetCode
+- Weakest pattern: Dynamic Programming (2/15 solved)
+- Suggested: "Coin Change" (Medium, DP) -- most common in interviews
+- Streak: 12 days
+
+## GitHub
+- 2 unread notifications (PR review requested on aegis)
+
+## Reading
+- "Building distributed systems with Rust" (HN, 342 points)
+```
+
+### Graph topology (updated)
 
 ```
               init_run
                  |
-     +-----------+-----------+
-     v           v           v
- fetch_github fetch_hn  fetch_leetcode
-     |           |           |
-     +-----------+-----------+
+     +-----------+-----------+-----------+-----------+
+     v           v           v           v           v
+ fetch_jobs  fetch_lc   fetch_github  fetch_hn  fetch_interviews
+     |           |           |           |           |
+     +-----------+-----------+-----------+-----------+
                  v
            check_fetches
             /         \
@@ -146,122 +276,6 @@ class BriefingState(TypedDict):
                END
 ```
 
-### Nodes
-
-| Node | Purpose | Can fail? |
-|---|---|---|
-| `init_run` | Assign `run_id`, write initial row to `briefing_runs` table | No (hard fail = abort) |
-| `fetch_github` | Fetch user's starred/trending + notifications via GitHub REST | Yes (fail-open) |
-| `fetch_hn` | Fetch top stories from HN Firebase API | Yes (fail-open) |
-| `fetch_leetcode` | Fetch daily challenge via LeetCode GraphQL | Yes (fail-open) |
-| `check_fetches` | Conditional: all failed -> `degraded_output`; else -> `prioritize` | No |
-| `prioritize` | LLM call: rank and tag items by relevance | Yes (retry once, then degraded) |
-| `synthesize` | LLM call: write final markdown briefing | Yes (retry once) |
-| `self_evaluate` | LLM call: score own output 0-1 on "useful + concise + accurate" | Yes (default score = 0.7) |
-| `maybe_refine` | Conditional: if score < 0.7 and `iterations < 2`, loop back to `synthesize` | No |
-| `degraded_output` | Emit a minimal briefing listing what failed + any raw items we did get | No |
-| `persist` | Write final state to `briefing_runs`, update `briefing_latest` pointer | No |
-
-### Node implementations
-
-**fetch_github**: Call GitHub REST API for:
-- Recent commits on your repos (last 24h)
-- Open PRs requiring your review
-- PR review requests from others
-- Repository activity on starred repos
-
-**fetch_leetcode**: Call LeetCode GraphQL API for:
-- Daily challenge problem
-- Current streak status (if LEETCODE_SESSION configured)
-
-**fetch_hn**: Call HN Algolia API for:
-- Top stories filtered by keywords: "distributed systems", "AI infrastructure", "system design", etc.
-- Apply relevance scoring based on interests
-
-**prioritize (LLM call)**:
-- System prompt includes current goals and priorities
-- Input: all fetched data
-- Output: ranked list of items with priority scores and reasoning
-- Time-sensitive items get boosted
-
-**synthesize (LLM call)**:
-- Takes prioritized items and generates a structured briefing
-- Format: sections for "Action required", "Updates", "Reading", "Stats"
-- Concise, scannable, references specific data points
-
-**self_evaluate (LLM call)**:
-- Scores on: relevance, actionability, conciseness
-- Returns score 0.0-1.0 and specific feedback
-- If score < 0.7, feedback is passed back to synthesize for refinement
-- Max 2 refinement iterations
-
-### Fail-open resilience
-
-Each fetch node wraps its API call in a try/except. On failure, the node returns successfully with error metadata rather than crashing the graph. The briefing agent always produces output, even if degraded.
-
-### Checkpointing
-
-`AsyncPostgresSaver` bound to the same Postgres instance. Thread ID = `run_id`. Every node boundary writes a checkpoint, giving free resumability and an audit trail of node-level state.
-
-## FastAPI surface
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/health` | Liveness + DB/Redis ping |
-| `POST` | `/briefing/run` | Trigger a run (returns `run_id` immediately, runs in background) |
-| `GET` | `/briefing/latest` | Latest briefing as JSON |
-| `GET` | `/briefing/runs/{run_id}` | Specific run |
-| `GET` | `/briefing/runs` | Paginated list |
-
-## Database schema
-
-### briefing_runs
-```sql
-CREATE TABLE briefing_runs (
-    run_id          UUID PRIMARY KEY,
-    triggered_at    TIMESTAMPTZ NOT NULL,
-    trigger_source  TEXT NOT NULL,
-    status          TEXT NOT NULL,
-    briefing_md     TEXT,
-    quality_score   REAL,
-    iterations      INTEGER NOT NULL DEFAULT 1,
-    sources_ok      TEXT[] NOT NULL DEFAULT '{}',
-    sources_failed  JSONB NOT NULL DEFAULT '{}',
-    total_cost_usd  NUMERIC(10, 6) NOT NULL DEFAULT 0,
-    total_latency_ms INTEGER,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
-
-### briefing_latest
-```sql
-CREATE TABLE briefing_latest (
-    id      INTEGER PRIMARY KEY CHECK (id = 1),
-    run_id  UUID NOT NULL REFERENCES briefing_runs(run_id),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
-
-### job_applications (v0.2)
-```sql
-CREATE TABLE job_applications (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    company TEXT NOT NULL,
-    role TEXT NOT NULL,
-    url TEXT,
-    status TEXT NOT NULL DEFAULT 'applied',
-    applied_date TIMESTAMP DEFAULT NOW(),
-    last_activity TIMESTAMP DEFAULT NOW(),
-    notes TEXT,
-    priority TEXT DEFAULT 'medium',
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-LangGraph checkpointer owns its own tables (`checkpoints`, `checkpoint_writes`, `checkpoint_blobs`) via `AsyncPostgresSaver.setup()`.
-
 ## Project structure
 
 ```
@@ -275,48 +289,57 @@ aegis/
 ├── README.md
 ├── AEGIS_PROJECT_PLAN.md
 ├── migrations/
-│   └── 001_initial.sql
+│   ├── 001_initial.sql
+│   └── 002_jobs_and_leetcode.sql
 ├── src/
 │   └── aegis/
 │       ├── __init__.py
-│       ├── config.py              # Pydantic Settings (env vars)
-│       ├── logging.py             # Loguru setup + cost estimation
-│       ├── app.py                 # FastAPI app factory
-│       ├── mcp_server.py          # FastMCP entrypoint (python -m aegis.mcp_server)
+│       ├── config.py
+│       ├── logging.py
+│       ├── app.py
+│       ├── mcp_server.py
 │       │
 │       ├── db/
-│       │   ├── __init__.py
-│       │   ├── engine.py          # asyncpg pool management
-│       │   ├── repository.py      # BriefingRunRepository
-│       │   └── cache.py           # Redis caching wrapper
+│       │   ├── engine.py
+│       │   ├── repository.py         # BriefingRunRepository
+│       │   ├── jobs_repository.py    # JobApplicationRepository
+│       │   ├── leetcode_repository.py # LeetCodeRepository
+│       │   └── cache.py
 │       │
 │       ├── llm/
-│       │   ├── __init__.py
-│       │   ├── gateway.py         # LLMGateway: direct Anthropic SDK, cost tracking
-│       │   └── prompts.py         # Prompt templates (prioritize, synthesize, eval)
+│       │   ├── gateway.py
+│       │   └── prompts.py
 │       │
 │       ├── sources/
-│       │   ├── __init__.py
-│       │   ├── base.py            # Source protocol + SourceResult type
+│       │   ├── base.py
 │       │   ├── github.py
 │       │   ├── hn.py
-│       │   └── leetcode.py
+│       │   ├── leetcode.py
+│       │   ├── jobs_source.py        # reads from internal DB for briefing
+│       │   └── leetcode_source.py    # reads from internal DB for briefing
+│       │
+│       ├── jobs/
+│       │   ├── __init__.py
+│       │   ├── analyzer.py           # LLM-powered JD parsing + fit scoring
+│       │   └── service.py            # JobService (CRUD + analysis)
+│       │
+│       ├── leetcode/
+│       │   ├── __init__.py
+│       │   └── service.py            # LeetCodeService (CRUD + suggestions)
 │       │
 │       ├── briefing/
-│       │   ├── __init__.py
-│       │   ├── service.py         # BriefingService (single entry point)
-│       │   ├── state.py           # BriefingState TypedDict
-│       │   ├── nodes.py           # LangGraph node functions
-│       │   └── graph.py           # build_briefing_graph()
+│       │   ├── service.py
+│       │   ├── state.py
+│       │   ├── nodes.py
+│       │   └── graph.py
 │       │
 │       ├── scheduler/
-│       │   ├── __init__.py
 │       │   └── apscheduler_runner.py
 │       │
 │       └── api/
-│           ├── __init__.py
 │           ├── health.py
-│           └── briefing.py
+│           ├── briefing.py
+│           └── jobs.py
 │
 └── tests/
     ├── conftest.py
@@ -324,11 +347,13 @@ aegis/
     │   ├── test_sources_github.py
     │   ├── test_sources_hn.py
     │   ├── test_sources_leetcode.py
-    │   ├── test_nodes.py
-    │   └── test_llm_gateway.py
+    │   ├── test_llm_gateway.py
+    │   ├── test_job_analyzer.py
+    │   └── test_leetcode_service.py
     ├── integration/
     │   ├── test_briefing_graph_e2e.py
     │   ├── test_mcp_server.py
+    │   ├── test_jobs_repository.py
     │   └── test_api.py
     └── fixtures/
         └── sample_source_payloads/
@@ -336,11 +361,9 @@ aegis/
 
 ## Configuration
 
-All config via environment variables, loaded through `pydantic-settings`:
-
 ```bash
 # --- Core ---
-AEGIS_ENV=local                          # local | prod
+AEGIS_ENV=local
 LOG_LEVEL=INFO
 
 # --- LLM ---
@@ -348,10 +371,17 @@ ANTHROPIC_API_KEY=sk-ant-...
 AEGIS_LLM_MODEL=claude-sonnet-4-5
 AEGIS_LLM_MAX_COST_USD_PER_RUN=0.50
 
+# --- Profile ---
+AEGIS_PROFILE_SKILLS=python,golang,distributed-systems,postgresql,redis,docker,kubernetes,fastapi,async-programming,system-design
+AEGIS_PROFILE_TARGET_ROLES=backend-engineer,platform-engineer,ai-engineer
+AEGIS_PROFILE_EXPERIENCE_YEARS=3
+AEGIS_PROFILE_PREFERRED_LOCATIONS=singapore,remote
+AEGIS_PROFILE_DEAL_BREAKERS=php,wordpress
+
 # --- Data sources ---
 GITHUB_TOKEN=ghp_...
 GITHUB_USERNAME=narenarya3
-LEETCODE_SESSION=                        # optional, for personalized data
+LEETCODE_SESSION=
 
 # --- Infrastructure ---
 DATABASE_URL=postgresql://aegis:aegis@localhost:5432/aegis
@@ -366,83 +396,89 @@ AEGIS_TIMEZONE=Asia/Singapore
 
 ### Phase 1 -- Skeleton (done)
 
-- [x] `uv init`, set up `pyproject.toml` with deps (loguru, anthropic, langgraph, fastapi, asyncpg, redis, apscheduler, mcp, httpx)
+- [x] `pyproject.toml` with deps
 - [x] `config.py`, `logging.py`, `db/engine.py`, `db/repository.py`, `db/cache.py`
 - [x] SQL migration (briefing_runs + briefing_latest)
 - [x] `docker-compose.yml` with Postgres + Redis
 - [x] FastAPI app factory + `/health` endpoint
-- [x] `sources/base.py` (Source protocol + SourceResult)
-- [x] `briefing/state.py` (BriefingState TypedDict)
-- [x] `scheduler/apscheduler_runner.py`
-- [x] Stub MCP server and API routes
+- [x] `sources/base.py`, `briefing/state.py`, `scheduler/apscheduler_runner.py`
 
-### Phase 2 -- Source clients
+### Phase 2 -- Source clients (done)
 
-- [ ] `sources/github.py`: fetch notifications, starred repos, recent activity via GitHub REST API
-- [ ] `sources/hn.py`: fetch top stories from HN Firebase API, filter by keywords
-- [ ] `sources/leetcode.py`: fetch daily challenge via LeetCode GraphQL
-- [ ] Unit tests with recorded fixtures (no live network in unit tests)
+- [x] `sources/github.py`, `sources/hn.py`, `sources/leetcode.py`
+- [x] Unit tests with recorded fixtures (9 tests passing)
 
-### Phase 3 -- LLM gateway
+### Phase 3 -- LLM gateway (done)
 
-- [ ] `llm/gateway.py`: direct Anthropic SDK wrapper, `call()` method, cost tracking, budget cap
-- [ ] `llm/prompts.py`: three prompt templates (prioritize, synthesize, self-evaluate)
-- [ ] Unit test with a mock Anthropic client
+- [x] `llm/gateway.py` with cost tracking and budget cap
+- [x] `llm/prompts.py` with prioritize/synthesize/evaluate templates
+- [x] Unit tests (4 tests passing)
 
-### Phase 4 -- LangGraph briefing agent
+### Phase 4a -- Job tracker (current)
 
-- [ ] `briefing/nodes.py`: implement all nodes as pure async functions
-- [ ] `briefing/graph.py`: assemble graph, wire `AsyncPostgresSaver`, export `build_briefing_graph()`
-- [ ] `briefing/service.py`: `BriefingService.run(trigger_source)` kicks off the graph
-- [ ] Integration test: full graph against testcontainers with mocked sources and mocked LLM
+- [ ] `migrations/002_jobs_and_leetcode.sql` -- job_applications + leetcode_problems tables
+- [ ] `db/jobs_repository.py` -- CRUD for job applications
+- [ ] `jobs/analyzer.py` -- LLM-powered JD parsing, fit scoring, gap analysis
+- [ ] `jobs/service.py` -- JobService coordinating repository + analyzer
+- [ ] Update `config.py` with profile settings
+- [ ] Unit tests for analyzer, integration tests for repository
 
-### Phase 5 -- Interfaces
+### Phase 4b -- LeetCode tracker
 
-- [ ] `api/briefing.py`: wire FastAPI routes to BriefingService
-- [ ] `mcp_server.py`: FastMCP tools/resources/prompts, all delegating to BriefingService
-- [ ] `scheduler/apscheduler_runner.py`: wire to `BriefingService.run("cron")`
-- [ ] Manual test: trigger via curl, via MCP (Claude Desktop), via scheduler
+- [ ] `db/leetcode_repository.py` -- CRUD for leetcode problems
+- [ ] `leetcode/service.py` -- LeetCodeService with progress stats and next-problem suggestions
+- [ ] Unit tests
 
-### Phase 6 -- Deployment
+### Phase 4c -- Briefing agent (LangGraph)
 
-- [ ] `Dockerfile` (multi-stage: uv build -> slim runtime)
-- [ ] `fly.toml` + `fly launch`
-- [ ] Fly Postgres + Upstash Redis provisioning
+- [ ] Update `briefing/state.py` with job/leetcode data fields
+- [ ] `sources/jobs_source.py` + `sources/leetcode_source.py` -- internal DB sources for briefing
+- [ ] `briefing/nodes.py` -- all nodes including new data sources
+- [ ] `briefing/graph.py` -- assemble graph with fan-out across 5 sources
+- [ ] `briefing/service.py` -- BriefingService entry point
+- [ ] Update `llm/prompts.py` with career-focused prompt templates
+- [ ] Integration test with mocked sources and LLM
+
+### Phase 5 -- MCP server + API
+
+- [ ] `mcp_server.py` -- all tools/resources/prompts wired to services
+- [ ] `api/jobs.py` -- REST endpoints for job tracker
+- [ ] `api/briefing.py` -- wire to BriefingService
+- [ ] `scheduler/apscheduler_runner.py` -- wire to briefing cron
+- [ ] Manual test from Claude Desktop
+
+### Phase 6 -- Interview prep agent (v0.2)
+
+- [ ] `migrations/003_interview_sessions.sql`
+- [ ] `interview/service.py` -- mock questions, answer evaluation, readiness scoring
+- [ ] MCP tools for interview prep
+- [ ] Integration with job tracker (company-specific prep)
+
+### Phase 7 -- Deployment
+
+- [ ] `Dockerfile` (multi-stage)
+- [ ] `fly.toml` + Fly.io deployment
 - [ ] Smoke test in prod
-
-### Phase 7 -- v0.2 (future)
-
-- [ ] Job application tracker (DB table + MCP tools + MCP resources)
-- [ ] Telegram bot delivery
-- [ ] LangSmith tracing
-- [ ] OpenAI fallback in LLM gateway
-- [ ] Additional MCP prompts (system design, resume review)
-- [ ] Multiple agents / agent registry
 
 ## Coding conventions
 
 - **Types**: everything is type-annotated
-- **Async everywhere**: no blocking calls inside async functions. Use `httpx.AsyncClient`, `asyncpg`, `redis.asyncio`
-- **Errors**: sources and LLM calls return result objects, never raise for expected failures. Raise only for programmer errors
-- **Logging**: Loguru with `run_id` bound when inside a run. JSON in prod, human-readable locally
-- **Tests**: prefer integration tests with testcontainers over heavy mocking. Mock only the network boundary
+- **Async everywhere**: `httpx.AsyncClient`, `asyncpg`, `redis.asyncio`
+- **Errors**: sources and LLM calls return result objects, never raise for expected failures
+- **Logging**: Loguru with `run_id` bound when inside a run
+- **Tests**: integration tests with testcontainers, mock only the network boundary
 - **No secrets in code.** All config via env
-- **Commit style**: conventional commits (`feat:`, `fix:`, `chore:`, etc.)
+- **Commit style**: conventional commits
 
 ## Key design principles
 
-1. **MCP-first**: Every capability is exposed through MCP. No backdoor APIs.
-2. **Fail-open**: Agents always produce output, even if degraded. Partial data is better than no data.
-3. **Cost-aware**: Track tokens and estimated cost per agent run. Set budget limits.
-4. **Testable**: Every node is a pure function that takes state and returns state.
-5. **Incremental**: The platform supports N agents, but ship with 1.
+1. **MCP-first**: Every capability is exposed through MCP tools/resources.
+2. **Your data first**: Briefing prioritizes internal data (jobs, LeetCode, interviews) over external feeds.
+3. **Fail-open**: Agents always produce output, even if degraded.
+4. **Cost-aware**: Track tokens and cost per run. Budget caps enforced.
+5. **Testable**: Every node is a pure function. Mock only external boundaries.
+6. **Career-focused**: Every feature should directly help you get hired or improve your skills.
 
 ## Resume bullet (target)
 
-"Designed and built Aegis, an MCP-native agentic platform for SWE workflows using Python, LangGraph, and FastMCP. Exposes domain-specific agents as MCP tools/resources/prompts for interoperability with Claude Code, Cursor, and any MCP client. The Daily Briefing Agent orchestrates parallel data fetching across 3 sources, applies LLM-driven prioritization with a self-evaluation refinement loop, and delivers personalized briefings with fail-open resilience, durable checkpointing, and per-run cost tracking."
-
-## Future agents (post-MVP)
-
-- **Interview Prep Agent**: Conducts adaptive mock interviews, tracks weak areas across sessions
-- **Job Search Agent**: Monitors job boards, matches postings to your profile, drafts tailored applications
-- **Code Review Agent**: Analyzes GitHub PRs across dimensions (correctness, performance, security)
+"Designed and built Aegis, an MCP-native career growth platform using Python, LangGraph, and FastMCP. Features include LLM-powered job fit scoring with gap analysis, LeetCode progress tracking with pattern-based recommendations, and a daily briefing agent that orchestrates parallel data fetching with self-evaluation refinement loops, fail-open resilience, and per-run cost tracking. Exposed as MCP tools for interoperability with Claude Desktop, Claude Code, and Cursor."
