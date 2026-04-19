@@ -1,0 +1,13 @@
+{
+  "data": {
+    "question": {
+      "title": "Coin Change",
+      "titleSlug": "coin-change",
+      "difficulty": "Medium",
+      "topicTags": [
+        {"name": "Dynamic Programming", "slug": "dynamic-programming"},
+        {"name": "Array", "slug": "array"}
+      ]
+    }
+  }
+}

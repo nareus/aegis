@@ -9,8 +9,8 @@
         "titleSlug": "two-sum",
         "difficulty": "Easy",
         "topicTags": [
-          {"name": "Array"},
-          {"name": "Hash Table"}
+          {"name": "Array", "slug": "array"},
+          {"name": "Hash Table", "slug": "hash-table"}
         ]
       }
     }

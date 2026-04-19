@@ -1,0 +1,13 @@
+{
+  "data": {
+    "question": {
+      "title": "Number of Islands",
+      "titleSlug": "number-of-islands",
+      "difficulty": "Medium",
+      "topicTags": [
+        {"name": "Graph", "slug": "graph"},
+        {"name": "Backtracking", "slug": "backtracking"}
+      ]
+    }
+  }
+}
