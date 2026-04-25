@@ -2,7 +2,7 @@
 
 from loguru import logger
 
-from aegis.db.leetcode_repository import LeetCodeRepository
+from aegis._legacy.leetcode_repository import LeetCodeRepository
 from aegis.sources.base import SourceResult
 
 

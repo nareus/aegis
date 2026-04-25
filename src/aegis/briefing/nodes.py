@@ -26,21 +26,20 @@ from aegis.llm.prompts import (
 from aegis.sources.base import SourceResult
 from aegis.sources.github import GitHubSource
 from aegis.sources.hn import HackerNewsSource
-from aegis.sources.leetcode import LeetCodeSource
 from aegis.sources.jobs_source import JobsSource
-from aegis.sources.leetcode_source import LeetCodeProgressSource
 
 
 # --- Init ---
 
 async def init_run(state: BriefingState) -> dict:
     """Assign run_id, write initial row to DB."""
+    import uuid
     run_id = str(uuid4())
-    triggered_at = datetime.now(timezone.utc).isoformat()
+    triggered_at = datetime.now(timezone.utc)
 
     repo = BriefingRunRepository()
     await repo.create_run(
-        run_id=__import__("uuid").UUID(run_id),
+        run_id=uuid.UUID(run_id),
         triggered_at=triggered_at,
         trigger_source=state.get("trigger_source", "api"),
     )
@@ -48,7 +47,7 @@ async def init_run(state: BriefingState) -> dict:
     logger.bind(run_id=run_id).info("Briefing run started")
     return {
         "run_id": run_id,
-        "triggered_at": triggered_at,
+        "triggered_at": triggered_at.isoformat(),
         "raw": {},
         "fetch_errors": {},
         "prioritized": None,
@@ -71,16 +70,8 @@ async def fetch_hn(state: BriefingState) -> dict:
     return await _fetch_source(state, HackerNewsSource())
 
 
-async def fetch_leetcode(state: BriefingState) -> dict:
-    return await _fetch_source(state, LeetCodeSource())
-
-
 async def fetch_jobs(state: BriefingState) -> dict:
     return await _fetch_source(state, JobsSource())
-
-
-async def fetch_leetcode_progress(state: BriefingState) -> dict:
-    return await _fetch_source(state, LeetCodeProgressSource())
 
 
 async def _fetch_source(state: BriefingState, source) -> dict:

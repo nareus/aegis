@@ -42,10 +42,12 @@ def create_app() -> FastAPI:
     from aegis.api.health import router as health_router
     from aegis.api.briefing import router as briefing_router
     from aegis.api.jobs import router as jobs_router
+    from aegis.api.traces import router as traces_router
 
     app.include_router(health_router)
     app.include_router(briefing_router)
     app.include_router(jobs_router)
+    app.include_router(traces_router)
 
     return app
 

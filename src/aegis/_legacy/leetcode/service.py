@@ -4,7 +4,7 @@ import json
 
 from loguru import logger
 
-from aegis.db.leetcode_repository import LeetCodeRepository, ALL_PATTERNS
+from aegis._legacy.leetcode_repository import LeetCodeRepository, ALL_PATTERNS
 from aegis.llm.gateway import LLMGateway
 
 # Minimum solved count per pattern before it's considered "covered"

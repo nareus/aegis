@@ -1,10 +1,12 @@
 """Application configuration via environment variables."""
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     # Core
     aegis_env: str = "local"
@@ -15,18 +17,12 @@ class Settings(BaseSettings):
     aegis_llm_model: str = "claude-sonnet-4-5"
     aegis_llm_max_cost_usd_per_run: float = 0.50
 
-    # Profile (used for job fit scoring and interview prep)
-    aegis_profile_skills: str = "python,golang,distributed-systems,postgresql,redis,docker,kubernetes,fastapi,async-programming,system-design"
-    aegis_profile_target_roles: str = "backend-engineer,platform-engineer,ai-engineer"
-    aegis_profile_experience_years: int = 3
-    aegis_profile_preferred_locations: str = "singapore,remote"
-    aegis_profile_deal_breakers: str = "php,wordpress"
+    # Profile (path to YAML; see profile.example.yaml)
+    aegis_profile_path: str = "./profile.yaml"
 
     # Data sources
     github_token: str = ""
-    github_username: str = ""
-    leetcode_username: str = ""
-    leetcode_session: str = ""
+    github_username: str = "nareus"
 
     # Infrastructure
     database_url: str = "postgresql://aegis:aegis@localhost:5432/aegis"
@@ -42,44 +38,27 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.aegis_env == "prod"
 
-    @property
-    def skills_list(self) -> list[str]:
-        return [s.strip() for s in self.aegis_profile_skills.split(",") if s.strip()]
-
-    @property
-    def target_roles_list(self) -> list[str]:
-        return [r.strip() for r in self.aegis_profile_target_roles.split(",") if r.strip()]
-
-    @property
-    def preferred_locations_list(self) -> list[str]:
-        return [loc.strip() for loc in self.aegis_profile_preferred_locations.split(",") if loc.strip()]
-
-    @property
-    def deal_breakers_list(self) -> list[str]:
-        return [d.strip() for d in self.aegis_profile_deal_breakers.split(",") if d.strip()]
-
     # ── Validation helpers ───────────────────────────────────────────────────
 
     def check(self) -> list[str]:
-        """Return a list of warning strings for missing/placeholder config values.
-
-        Call at startup to surface problems early instead of failing mid-request.
-        Empty list means everything required is set.
-        """
+        """Return a list of warning strings for missing/placeholder config values."""
         warnings: list[str] = []
 
-        _PLACEHOLDER_PREFIXES = ("sk-ant-", "ghp_", "your-")
-
         def _missing(value: str, label: str, required: bool = True) -> None:
-            if not value or any(value.startswith(p) for p in _PLACEHOLDER_PREFIXES):
+            is_placeholder = not value or value.endswith("...")
+            if is_placeholder:
                 prefix = "REQUIRED" if required else "optional"
                 warnings.append(f"  [{prefix}] {label} is not set")
 
         _missing(self.anthropic_api_key, "ANTHROPIC_API_KEY")
         _missing(self.github_token, "GITHUB_TOKEN", required=False)
         _missing(self.github_username, "GITHUB_USERNAME", required=False)
-        _missing(self.leetcode_username, "LEETCODE_USERNAME", required=False)
-        _missing(self.leetcode_session, "LEETCODE_SESSION", required=False)
+
+        if not Path(self.aegis_profile_path).exists():
+            warnings.append(
+                f"  [optional] profile file not found at {self.aegis_profile_path} "
+                f"-- copy profile.example.yaml to {self.aegis_profile_path}"
+            )
 
         return warnings
 

@@ -4,7 +4,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
-from aegis.interview.service import InterviewService, _parse_json, _format_sessions_for_prompt
+from aegis._legacy.interview.service import InterviewService, _parse_json, _format_sessions_for_prompt
 from aegis.llm.gateway import LLMGateway, LLMResult
 
 

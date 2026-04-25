@@ -1,5 +1,6 @@
 """Data access layer for briefing runs."""
 
+from datetime import datetime
 from uuid import UUID
 
 from loguru import logger
@@ -13,7 +14,7 @@ class BriefingRunRepository:
     async def create_run(
         self,
         run_id: UUID,
-        triggered_at: str,
+        triggered_at: datetime,
         trigger_source: str,
     ) -> None:
         """Insert a new run with status 'running'."""
@@ -21,7 +22,7 @@ class BriefingRunRepository:
         await pool.execute(
             """
             INSERT INTO briefing_runs (run_id, triggered_at, trigger_source, status)
-            VALUES ($1, $2::timestamptz, $3, 'running')
+            VALUES ($1, $2, $3, 'running')
             """,
             run_id,
             triggered_at,

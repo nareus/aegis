@@ -1,12 +1,16 @@
 """LLM Gateway -- direct Anthropic SDK wrapper with cost tracking."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import anthropic
 from loguru import logger
 
 from aegis.config import settings
 from aegis.logging import estimate_cost
+
+if TYPE_CHECKING:
+    from aegis.tracing.spans import SpanRecord
 
 
 @dataclass
@@ -53,8 +57,13 @@ class LLMGateway:
         user: str,
         max_tokens: int = 4096,
         temperature: float = 0.3,
+        span: "SpanRecord | None" = None,
     ) -> LLMResult:
-        """Make a single LLM call. Raises BudgetExceededError if budget would be exceeded."""
+        """Make a single LLM call. Raises BudgetExceededError if budget would be exceeded.
+
+        If `span` is provided, attributes cost and tokens to it (additive — multiple
+        calls within one span accumulate).
+        """
         if self._spent_usd >= self._budget_usd:
             raise BudgetExceededError(
                 f"Budget exhausted: ${self._spent_usd:.4f} >= ${self._budget_usd:.4f}"
@@ -83,6 +92,11 @@ class LLMGateway:
 
         self._spent_usd += cost
         self._calls.append(result)
+
+        if span is not None:
+            span.cost_usd += cost
+            span.input_tokens += input_tokens
+            span.output_tokens += output_tokens
 
         logger.info(
             "LLM call: {} input, {} output tokens, ${:.4f} (total: ${:.4f}/{:.4f})",

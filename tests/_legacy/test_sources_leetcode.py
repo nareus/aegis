@@ -3,7 +3,7 @@
 import respx
 from httpx import Response
 
-from aegis.sources.leetcode import LeetCodeSource
+from aegis._legacy.leetcode_source_external import LeetCodeSource
 
 
 @respx.mock
@@ -30,7 +30,7 @@ async def test_leetcode_fetch_success(load_fixture):
 @respx.mock
 async def test_leetcode_fetch_with_submissions(load_fixture, monkeypatch):
     """When session + username are set, recent submissions are fetched."""
-    import aegis.sources.leetcode as lc_module
+    import aegis._legacy.leetcode_source_external as lc_module
 
     monkeypatch.setattr(lc_module.settings, "leetcode_session", "fake-session")
     monkeypatch.setattr(lc_module.settings, "leetcode_username", "testuser")

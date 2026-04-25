@@ -4,8 +4,8 @@ import json
 
 from loguru import logger
 
-from aegis.config import settings
 from aegis.llm.gateway import LLMGateway, LLMResult
+from aegis.profile import load_profile
 
 PARSE_JD_SYSTEM = """\
 You are a job description parser. Extract structured information from the provided \
@@ -137,14 +137,7 @@ class JobAnalyzer:
 
 
 def _build_profile_prompt() -> str:
-    """Build a profile summary from config settings."""
-    return (
-        f"Skills: {', '.join(settings.skills_list)}\n"
-        f"Target roles: {', '.join(settings.target_roles_list)}\n"
-        f"Experience: {settings.aegis_profile_experience_years} years\n"
-        f"Preferred locations: {', '.join(settings.preferred_locations_list)}\n"
-        f"Deal breakers: {', '.join(settings.deal_breakers_list)}"
-    )
+    return load_profile().as_prompt()
 
 
 def _parse_json(text: str) -> dict:

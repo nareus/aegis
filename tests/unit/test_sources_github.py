@@ -15,7 +15,7 @@ async def test_github_fetch_success(load_fixture):
     respx.get("https://api.github.com/notifications").mock(
         return_value=Response(200, json=notifications)
     )
-    respx.get("https://api.github.com/users/narenarya3/events").mock(
+    respx.get("https://api.github.com/users/nareus/events").mock(
         return_value=Response(200, json=events)
     )
     respx.get("https://api.github.com/user/starred").mock(

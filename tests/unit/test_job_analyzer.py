@@ -104,7 +104,21 @@ def test_parse_json_handles_invalid():
     assert _parse_json("not json") == {}
 
 
-def test_build_profile_prompt():
+def test_build_profile_prompt(monkeypatch):
+    from aegis.profile import Profile
+    import aegis.jobs.analyzer as analyzer_mod
+
+    monkeypatch.setattr(
+        analyzer_mod,
+        "load_profile",
+        lambda: Profile(
+            skills=["python"],
+            target_roles=["backend-engineer"],
+            preferred_locations=["singapore"],
+            experience_years=3,
+        ),
+    )
+
     prompt = _build_profile_prompt()
     assert "python" in prompt
     assert "backend-engineer" in prompt

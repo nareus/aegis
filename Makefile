@@ -1,4 +1,4 @@
-.PHONY: help start setup doctor api mcp stop restart migrate logs reset install
+.PHONY: help start setup doctor api mcp stop restart migrate logs reset install import-leetcode
 
 # Default target
 help:
@@ -41,10 +41,10 @@ doctor:
 		echo "  [MISSING] .env not found -- run: cp .env.example .env"; \
 	else \
 		echo "  [ok] .env exists"; \
-		grep -q "^ANTHROPIC_API_KEY=sk-ant-" .env 2>/dev/null \
-			&& echo "  [MISSING] ANTHROPIC_API_KEY is still a placeholder -- edit .env" \
-			|| (grep -q "^ANTHROPIC_API_KEY=$$" .env 2>/dev/null \
-				&& echo "  [MISSING] ANTHROPIC_API_KEY is empty -- edit .env" \
+		grep -q "^ANTHROPIC_API_KEY=$$" .env 2>/dev/null \
+			&& echo "  [MISSING] ANTHROPIC_API_KEY is empty -- edit .env" \
+			|| (grep -q "^\.\.\." .env 2>/dev/null \
+				&& echo "  [MISSING] ANTHROPIC_API_KEY is still a placeholder -- edit .env" \
 				|| echo "  [ok] ANTHROPIC_API_KEY is set"); \
 	fi
 	@echo ""
@@ -79,6 +79,9 @@ migrate:
 		psql "$(DATABASE_URL)" -f "$$f" 2>/dev/null || true; \
 	done
 	@echo "  Migrations done."
+
+import-leetcode:
+	uv run python scripts/import_leetcode.py
 
 logs:
 	docker compose logs -f postgres redis

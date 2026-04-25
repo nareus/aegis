@@ -6,7 +6,7 @@ from uuid import UUID
 from loguru import logger
 
 from aegis.config import settings
-from aegis.db.interview_repository import InterviewRepository
+from aegis._legacy.interview_repository import InterviewRepository
 from aegis.llm.gateway import LLMGateway
 
 # ---------------------------------------------------------------------------

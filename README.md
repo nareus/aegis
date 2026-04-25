@@ -19,7 +19,7 @@ Personal agent platform for SWE career growth. Tracks job applications, LeetCode
 ### First-time setup
 
 ```bash
-git clone https://github.com/narenarya3/aegis
+git clone https://github.com/nareus/aegis
 cd aegis
 make start
 ```

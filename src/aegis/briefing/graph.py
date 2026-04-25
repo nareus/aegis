@@ -7,9 +7,7 @@ from aegis.briefing.nodes import (
     init_run,
     fetch_github,
     fetch_hn,
-    fetch_leetcode,
     fetch_jobs,
-    fetch_leetcode_progress,
     check_fetches,
     route_after_fetches,
     prioritize,
@@ -30,9 +28,7 @@ def build_briefing_graph() -> StateGraph:
            |
            +-- fetch_github
            +-- fetch_hn
-           +-- fetch_leetcode
            +-- fetch_jobs
-           +-- fetch_leetcode_progress
            |
         check_fetches
           /         \\
@@ -54,9 +50,7 @@ def build_briefing_graph() -> StateGraph:
     graph.add_node("init_run", init_run)
     graph.add_node("fetch_github", fetch_github)
     graph.add_node("fetch_hn", fetch_hn)
-    graph.add_node("fetch_leetcode", fetch_leetcode)
     graph.add_node("fetch_jobs", fetch_jobs)
-    graph.add_node("fetch_leetcode_progress", fetch_leetcode_progress)
     graph.add_node("check_fetches", check_fetches)
     graph.add_node("prioritize", prioritize)
     graph.add_node("synthesize", synthesize)
@@ -71,16 +65,12 @@ def build_briefing_graph() -> StateGraph:
     # Fan-out: init_run -> all fetch nodes in parallel
     graph.add_edge("init_run", "fetch_github")
     graph.add_edge("init_run", "fetch_hn")
-    graph.add_edge("init_run", "fetch_leetcode")
     graph.add_edge("init_run", "fetch_jobs")
-    graph.add_edge("init_run", "fetch_leetcode_progress")
 
     # Fan-in: all fetch nodes -> check_fetches
     graph.add_edge("fetch_github", "check_fetches")
     graph.add_edge("fetch_hn", "check_fetches")
-    graph.add_edge("fetch_leetcode", "check_fetches")
     graph.add_edge("fetch_jobs", "check_fetches")
-    graph.add_edge("fetch_leetcode_progress", "check_fetches")
 
     # Conditional: check_fetches -> prioritize or degraded_output
     graph.add_conditional_edges(

@@ -3,7 +3,7 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from aegis.leetcode.service import (
+from aegis._legacy.leetcode.service import (
     LeetCodeService,
     _identify_weak_patterns,
     _compute_coverage,
@@ -11,7 +11,7 @@ from aegis.leetcode.service import (
     _normalise_patterns,
     PATTERN_COVERAGE_THRESHOLD,
 )
-from aegis.db.leetcode_repository import ALL_PATTERNS
+from aegis._legacy.leetcode_repository import ALL_PATTERNS
 from aegis.llm.gateway import LLMGateway, LLMResult
 
 
