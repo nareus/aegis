@@ -1,4 +1,4 @@
-.PHONY: help start setup doctor api mcp stop restart migrate logs reset install import-leetcode
+.PHONY: help start setup doctor api mcp stop restart migrate logs reset install
 
 # Default target
 help:
@@ -80,14 +80,11 @@ migrate:
 	done
 	@echo "  Migrations done."
 
-import-leetcode:
-	uv run python scripts/import_leetcode.py
-
 logs:
 	docker compose logs -f postgres redis
 
 reset:
-	@echo "⚠  This will DELETE all your data (jobs, LeetCode progress, briefings)."
+	@echo "⚠  This will DELETE all your data (jobs, briefings, traces)."
 	@read -p "   Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ]
 	docker compose down -v
 	$(MAKE) _infra_up migrate

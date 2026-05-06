@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     aegis_llm_model: str = "claude-sonnet-4-5"
     aegis_llm_max_cost_usd_per_run: float = 0.50
 
+    # Workflows
+    aegis_max_refinements: int = 2
+
     # Profile (path to YAML; see profile.example.yaml)
     aegis_profile_path: str = "./profile.yaml"
 
@@ -27,10 +30,6 @@ class Settings(BaseSettings):
     # Infrastructure
     database_url: str = "postgresql://aegis:aegis@localhost:5432/aegis"
     redis_url: str = "redis://localhost:6379/0"
-
-    # Scheduler
-    aegis_briefing_cron: str = "0 7 * * *"
-    aegis_timezone: str = "Asia/Singapore"
 
     # ── Derived properties ───────────────────────────────────────────────────
 

@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from uuid import uuid4
+
 from aegis.llm.gateway import LLMGateway, LLMResult, BudgetExceededError
+from aegis.tracing.spans import SpanRecord
 
 
 def _mock_response(text: str, input_tokens: int = 100, output_tokens: int = 50):
@@ -103,3 +106,35 @@ async def test_call_passes_parameters(mock_anthropic_cls):
     assert call_kwargs["messages"] == [{"role": "user", "content": "Summarize this."}]
     assert call_kwargs["max_tokens"] == 2048
     assert call_kwargs["temperature"] == 0.5
+
+
+@patch("aegis.llm.gateway.anthropic.AsyncAnthropic")
+async def test_call_attributes_cost_to_span(mock_anthropic_cls):
+    mock_client = MagicMock()
+    mock_client.messages.create = AsyncMock(
+        return_value=_mock_response("hi", input_tokens=300, output_tokens=150)
+    )
+    mock_anthropic_cls.return_value = mock_client
+
+    gateway = LLMGateway(budget_usd=10.0)
+    span = SpanRecord(
+        run_id=uuid4(), agent_name="x", workflow="w", input_payload={}
+    )
+
+    await gateway.call(system="s", user="u", span=span)
+
+    assert span.input_tokens == 300
+    assert span.output_tokens == 150
+    assert span.cost_usd > 0
+
+
+@patch("aegis.llm.gateway.anthropic.AsyncAnthropic")
+async def test_call_without_span_does_not_crash(mock_anthropic_cls):
+    """Span is optional; call without one must work unchanged."""
+    mock_client = MagicMock()
+    mock_client.messages.create = AsyncMock(return_value=_mock_response("ok"))
+    mock_anthropic_cls.return_value = mock_client
+
+    gateway = LLMGateway(budget_usd=1.0)
+    result = await gateway.call(system="s", user="u")
+    assert result.text == "ok"

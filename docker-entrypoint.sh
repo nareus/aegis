@@ -21,11 +21,6 @@ case "$1" in
     echo "[entrypoint] Starting MCP server (stdio)"
     exec python -m aegis.mcp_server
     ;;
-  worker)
-    run_migrations
-    echo "[entrypoint] Starting scheduler worker"
-    exec python -m aegis.scheduler.worker
-    ;;
   migrate)
     run_migrations
     ;;

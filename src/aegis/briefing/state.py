@@ -14,7 +14,7 @@ def merge_dicts(left: dict, right: dict) -> dict:
 class BriefingState(TypedDict):
     run_id: str
     triggered_at: str
-    trigger_source: str                  # "cron" | "mcp" | "api"
+    trigger_source: str                  # "mcp" | "api"
 
     # Annotated with merge_dicts so parallel fetch nodes can write concurrently
     raw: Annotated[dict[str, dict | None], merge_dicts]

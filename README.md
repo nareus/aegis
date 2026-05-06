@@ -1,13 +1,12 @@
 # Aegis
 
-Personal agent platform for SWE career growth. Tracks job applications, LeetCode progress, and interview prep — exposed as MCP tools so Claude Desktop and Claude Code can act on them directly.
+Personal agent platform for SWE career growth. Tracks job applications and produces a daily briefing — exposed as MCP tools so Claude Desktop and Claude Code can act on them directly.
 
 ## What it does
 
-- **Job Tracker** — paste a LinkedIn JD, get a fit score against your profile, track application status and follow-ups
-- **LeetCode Tracker** — log problems by pattern, see weak areas, get AI-suggested next problems
-- **Interview Prep** — generate mock system design and behavioral questions, submit answers for LLM evaluation, track readiness per company
-- **Daily Briefing** — AI-generated morning summary pulling from all three trackers plus GitHub and HN
+- **Job Tracker** — paste a JD (text or URL), a multi-agent pipeline (Researcher → Analyst → Critic with a refinement loop) extracts the role, scores fit against your profile, and persists the result with full trace metadata.
+- **Daily Briefing** — LangGraph agent that fans out to GitHub, Hacker News, and your own job pipeline, prioritises items, synthesises a markdown briefing, then self-evaluates and refines if quality is low.
+- **Tracing viewer** — every workflow run gets a `run_id`; visit `/trace/{run_id}` for an HTML span tree with per-node cost, tokens, and latency.
 
 ## Quick start
 
@@ -35,8 +34,7 @@ Then open `.env` and fill in your API keys:
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...     # required for all LLM features
 GITHUB_TOKEN=ghp_...             # required for GitHub briefing section
-LEETCODE_SESSION=...             # optional: auto-sync AC submissions
-LEETCODE_USERNAME=your-username  # optional: pair with LEETCODE_SESSION
+GITHUB_USERNAME=your-handle      # GitHub user the briefing reads from
 ```
 
 ### Run the API
@@ -77,12 +75,12 @@ For Claude Code, run `claude mcp add` or add to your project's `.mcp.json`.
 ## Daily workflow
 
 ### Morning briefing
-In Claude: *"Run my daily briefing"* → triggers `run_briefing`, returns a prioritised summary of your day.
+In Claude: *"Run my daily briefing"* → triggers `run_briefing`, returns a prioritised markdown summary plus a `trace_url` you can open to inspect every LLM call. The briefing is on-demand only — there's no background scheduler, so nothing runs unless you (or Claude) call it.
 
 ### Adding a job
-1. Copy a LinkedIn JD (or any job posting text)
-2. In Claude: *"Add this job: [paste JD]"*
-3. Aegis parses it, scores fit against your profile, saves it
+1. Copy a LinkedIn JD (or any job posting text), or grab the URL.
+2. In Claude: *"Add this job: [paste JD or URL]"*
+3. Aegis runs Researcher → Analyst → Critic. If the critic flags issues, the analyst re-runs with that feedback (up to `AEGIS_MAX_REFINEMENTS` rounds), then persists the final analysis with `fit_score`, `recommendation`, refinement count, and the run's trace pointer.
 
 Or via API:
 ```bash
@@ -91,17 +89,15 @@ curl -X POST http://localhost:8000/jobs \
   -d '{"text": "Senior Backend Engineer at Stripe...", "url": "https://linkedin.com/jobs/..."}'
 ```
 
-### LeetCode tracking
-In Claude:
-- *"I just solved Two Sum — log it as arrays, hash-table, Easy"*
-- *"What should I practice next?"*
-- *"Show my LeetCode progress"*
+### Inspecting a run
+- `get_trace(run_id)` from Claude returns a flat span summary.
+- `http://localhost:8000/trace/{run_id}` renders the same data as a span tree in the browser; `/trace/{run_id}/json` gives the raw payload.
 
-### Interview prep
-In Claude:
-- *"Give me a system design question for Stripe"*
-- *"Here's my answer: [paste answer]"* → get scored feedback
-- *"How ready am I for my Stripe interview?"*
+## MCP surface
+
+**Tools:** `run_briefing`, `get_latest_briefing`, `add_job`, `list_jobs`, `update_job_status`, `get_follow_ups`, `get_top_job_fits`, `get_trace`.
+**Resources:** `aegis://briefing/latest`, `aegis://jobs/summary`.
+**Prompts:** `daily_briefing_prompt`.
 
 ## All commands
 
@@ -110,6 +106,7 @@ In Claude:
 | `make start` | First-time setup: install, start infra, migrate |
 | `make api` | Start REST API at http://localhost:8000 |
 | `make mcp` | Start MCP server for Claude |
+| `make doctor` | Check prerequisites and config |
 | `make stop` | Stop postgres + redis (data preserved) |
 | `make restart` | Restart infra |
 | `make migrate` | Apply new SQL migrations |
@@ -127,32 +124,52 @@ The only thing that wipes it is `make reset` (which asks for confirmation).
 
 ## Profile configuration
 
-Edit `.env` to tune fit scoring and interview prep to your background:
+Edit `profile.yaml` (copied from `profile.example.yaml`) to tune fit scoring to your background:
 
-```bash
-AEGIS_PROFILE_SKILLS=python,golang,distributed-systems,postgresql,redis,docker,kubernetes
-AEGIS_PROFILE_TARGET_ROLES=backend-engineer,platform-engineer,ai-engineer
-AEGIS_PROFILE_EXPERIENCE_YEARS=3
-AEGIS_PROFILE_PREFERRED_LOCATIONS=singapore,remote
-AEGIS_PROFILE_DEAL_BREAKERS=php,wordpress
+```yaml
+skills:
+  - python
+  - golang
+  - distributed-systems
+target_roles:
+  - backend-engineer
+  - ai-engineer
+experience_years: 3
+preferred_locations:
+  - singapore
+  - remote
+deal_breakers:
+  - php
+  - wordpress
 ```
+
+Point `AEGIS_PROFILE_PATH` at a different file if you want to keep the profile outside the repo.
+
+## Tuning
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `AEGIS_LLM_MODEL` | `claude-sonnet-4-5` | Anthropic model used by every agent |
+| `AEGIS_LLM_MAX_COST_USD_PER_RUN` | `0.50` | Hard budget per gateway instance — raises `BudgetExceededError` |
+| `AEGIS_MAX_REFINEMENTS` | `2` | Max critic→analyst loops before the job analysis finalises |
 
 ## Project structure
 
 ```
 aegis/
 ├── src/aegis/
-│   ├── briefing/        # LangGraph daily briefing agent
-│   ├── interview/       # Interview prep service
-│   ├── jobs/            # Job tracker + LLM fit scoring
-│   ├── leetcode/        # LeetCode progress tracker
-│   ├── db/              # asyncpg repositories
-│   ├── llm/             # Anthropic gateway + prompts
-│   ├── sources/         # GitHub, HN, LeetCode, internal DB sources
-│   ├── api/             # FastAPI routers
-│   ├── scheduler/       # APScheduler cron runner
+│   ├── agents/          # Researcher, Analyst, Critic + auto-tracing base class
+│   ├── workflows/
+│   │   └── job_analysis/  # LangGraph wiring + service for the job-analysis pipeline
+│   ├── briefing/        # LangGraph daily briefing agent (nodes, graph, service)
+│   ├── jobs/            # Job service facade exposed by API and MCP
+│   ├── sources/         # GitHub, HN, internal jobs source for the briefing
+│   ├── llm/             # Anthropic gateway + prompts (cost-tracked, budget-capped)
+│   ├── tracing/         # Span recorder, repository, HTML viewer
+│   ├── db/              # asyncpg engine + repositories
+│   ├── api/             # FastAPI routers (jobs, briefing, traces, health)
 │   ├── app.py           # FastAPI factory
-│   └── mcp_server.py    # FastMCP server (all tools/resources/prompts)
+│   └── mcp_server.py    # FastMCP server (tools, resources, prompts)
 ├── migrations/          # Numbered SQL migrations (applied in order)
 ├── tests/
 │   ├── unit/
@@ -169,4 +186,4 @@ aegis/
 uv run pytest
 ```
 
-79 tests, no external dependencies required (all network calls are mocked).
+All network calls are mocked, so the suite runs without API keys or live infra.

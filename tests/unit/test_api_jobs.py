@@ -14,9 +14,6 @@ def client():
     with (
         patch("aegis.app.get_pool", new_callable=AsyncMock),
         patch("aegis.app.close_pool", new_callable=AsyncMock),
-        patch("aegis.app.schedule_briefing"),
-        patch("aegis.app.start_scheduler"),
-        patch("aegis.app.stop_scheduler"),
     ):
         from aegis.app import create_app
         app = create_app()

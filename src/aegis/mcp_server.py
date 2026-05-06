@@ -64,20 +64,51 @@ async def get_latest_briefing() -> dict:
 async def add_job(text: str, url: str = "") -> dict:
     """Parse a job description and add it to the job tracker.
 
-    Paste the full JD text (copied from LinkedIn or any site). Aegis will:
-    - Extract company, role, tech stack, salary, location
-    - Score fit against your profile (0-1)
-    - Save to the tracker
+    Paste the full JD text (or pass a URL as the first argument). Aegis runs
+    the multi-agent pipeline (Researcher → Analyst → Critic with refinement)
+    and persists the analysis along with the run's trace pointer.
 
     Args:
-        text: Full job description text.
-        url:  Optional source URL (e.g. LinkedIn posting URL).
+        text: Full JD text or a URL to fetch.
+        url:  Optional source URL stored on the saved job.
 
     Returns:
-        job_id, company, role, fit_score, fit_analysis.
+        run_id, job_id, company, role, fit_score, recommendation,
+        refinement_count, total_cost_usd, trace_url.
     """
     logger.info("MCP: add_job for url={}", url or "(no url)")
     return await _jobs().add_job(text, url=url or None)
+
+
+@mcp.tool()
+async def get_trace(run_id: str) -> dict:
+    """Return a trace summary for a workflow run.
+
+    Args:
+        run_id: UUID returned from add_job, run_briefing, etc.
+
+    Returns:
+        trace_url (HTTP path) and a flat list of span summaries.
+    """
+    from uuid import UUID
+    from aegis.tracing.repository import TraceRepository
+
+    spans = await TraceRepository().get_run_tree(UUID(run_id))
+    if not spans:
+        return {"error": f"no trace found for run_id={run_id}"}
+    return {
+        "trace_url": f"/trace/{run_id}",
+        "spans": [
+            {
+                "agent_name": s["agent_name"],
+                "workflow": s["workflow"],
+                "latency_ms": s["latency_ms"],
+                "cost_usd": float(s["cost_usd"]) if s["cost_usd"] is not None else None,
+                "error": s["error"],
+            }
+            for s in spans
+        ],
+    }
 
 
 @mcp.tool()

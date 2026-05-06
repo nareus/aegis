@@ -11,9 +11,6 @@ def client():
     with (
         patch("aegis.app.get_pool", new_callable=AsyncMock),
         patch("aegis.app.close_pool", new_callable=AsyncMock),
-        patch("aegis.app.schedule_briefing"),
-        patch("aegis.app.start_scheduler"),
-        patch("aegis.app.stop_scheduler"),
     ):
         from aegis.app import create_app
         app = create_app()
@@ -28,7 +25,7 @@ MOCK_RUN_RESULT = {
     "quality_score": 0.88,
     "total_cost_usd": 0.012,
     "total_latency_ms": 3200,
-    "sources_ok": ["github", "hn", "leetcode"],
+    "sources_ok": ["github", "hn", "jobs"],
     "sources_failed": [],
 }
 
@@ -37,7 +34,7 @@ MOCK_RUN_ROW = {
     "briefing_markdown": "## Action Required\n- Review PR #42",
     "quality_score": 0.88,
     "triggered_at": "2026-04-19T07:00:00",
-    "trigger_source": "cron",
+    "trigger_source": "api",
 }
 
 

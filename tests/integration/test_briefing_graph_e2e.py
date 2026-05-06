@@ -156,7 +156,7 @@ async def test_full_graph_all_sources_fail(
     initial_state: BriefingState = {
         "run_id": "",
         "triggered_at": "",
-        "trigger_source": "cron",
+        "trigger_source": "api",
         "raw": {},
         "fetch_errors": {},
         "prioritized": None,

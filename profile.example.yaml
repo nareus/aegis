@@ -1,6 +1,6 @@
 # Aegis candidate profile.
 # Copy to profile.yaml (or set AEGIS_PROFILE_PATH to point elsewhere) and edit.
-# Used by the job-fit analyzer and interview-prep prompts.
+# Used by the job-fit analyst and critic agents.
 
 skills:
   - python

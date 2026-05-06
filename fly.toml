@@ -11,7 +11,6 @@ primary_region = "sin"   # Singapore -- closest to target location
 # ── API process (main) ──────────────────────────────────────────────────────
 [processes]
   api = "api"
-  scheduler = "worker"
 
 [[services]]
   protocol = "tcp"
@@ -46,17 +45,10 @@ primary_region = "sin"   # Singapore -- closest to target location
   memory = "512mb"
   processes = ["api"]
 
-[[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
-  processes = ["scheduler"]
-
 # ── Environment (non-secret) ─────────────────────────────────────────────────
 [env]
   AEGIS_ENV = "prod"
   LOG_LEVEL = "INFO"
-  AEGIS_TIMEZONE = "Asia/Singapore"
-  AEGIS_BRIEFING_CRON = "0 7 * * *"
   AEGIS_LLM_MODEL = "claude-sonnet-4-5"
   AEGIS_LLM_MAX_COST_USD_PER_RUN = "0.50"
   GITHUB_USERNAME = "narenarya3"
@@ -65,6 +57,5 @@ primary_region = "sin"   # Singapore -- closest to target location
 # fly secrets set \
 #   ANTHROPIC_API_KEY="sk-ant-..." \
 #   GITHUB_TOKEN="ghp_..." \
-#   LEETCODE_SESSION="..." \
 #   DATABASE_URL="postgresql://..." \
 #   REDIS_URL="redis://..."

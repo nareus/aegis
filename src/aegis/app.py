@@ -7,7 +7,6 @@ from fastapi import FastAPI
 from aegis.config import settings
 from aegis.db.engine import close_pool, get_pool
 from aegis.logging import setup_logging
-from aegis.scheduler.apscheduler_runner import schedule_briefing, start_scheduler, stop_scheduler
 
 
 def _warn_config() -> None:
@@ -19,20 +18,12 @@ def _warn_config() -> None:
             logger.warning(w)
 
 
-async def _run_briefing_cron():
-    from aegis.briefing.service import BriefingService
-    await BriefingService().run(trigger_source="cron")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
     _warn_config()
     await get_pool()
-    schedule_briefing(_run_briefing_cron)
-    start_scheduler()
     yield
-    stop_scheduler()
     await close_pool()
 
 

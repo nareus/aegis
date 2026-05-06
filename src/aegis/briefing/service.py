@@ -9,7 +9,7 @@ from aegis.briefing.state import BriefingState
 
 
 class BriefingService:
-    """Coordinates briefing runs. All trigger paths (MCP, API, scheduler) go through here."""
+    """Coordinates briefing runs. Both trigger paths (MCP, API) go through here."""
 
     def __init__(self) -> None:
         self._graph = build_briefing_graph()
@@ -18,7 +18,7 @@ class BriefingService:
         """Execute a full briefing run.
 
         Args:
-            trigger_source: "cron", "mcp", or "api"
+            trigger_source: "mcp" or "api"
 
         Returns:
             Dict with run_id, status, briefing_markdown, quality_score, cost.

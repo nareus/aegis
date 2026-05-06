@@ -54,6 +54,56 @@ class JobApplicationRepository:
         logger.info("Created job application: {} at {}", role, company)
         return row["id"]
 
+    async def create_with_analysis(
+        self,
+        *,
+        company: str,
+        role: str,
+        url: str | None,
+        source_text: str | None,
+        tech_stack: list[str],
+        location: str | None,
+        remote: bool | None,
+        salary_range: str | None,
+        fit_score: float | None,
+        fit_analysis: dict,
+        critic_feedback: dict | None,
+        refinement_count: int,
+        analysis_run_id: UUID,
+    ) -> UUID:
+        """Insert a job alongside its multi-agent analysis trace pointer."""
+        pool = await get_pool()
+        row = await pool.fetchrow(
+            """
+            INSERT INTO job_applications
+                (company, role, url, source_text, status, fit_score, fit_analysis,
+                 tech_stack, salary_range, location, remote,
+                 critic_feedback, refinement_count, analysis_run_id)
+            VALUES ($1, $2, $3, $4, 'saved', $5, $6::jsonb,
+                    $7, $8, $9, $10,
+                    $11::jsonb, $12, $13)
+            RETURNING id
+            """,
+            company,
+            role,
+            url,
+            source_text,
+            fit_score,
+            json.dumps(fit_analysis),
+            tech_stack,
+            salary_range,
+            location,
+            remote,
+            json.dumps(critic_feedback) if critic_feedback else None,
+            refinement_count,
+            analysis_run_id,
+        )
+        logger.info(
+            "Created job with analysis: {} at {} (fit={}, refinements={}, run_id={})",
+            role, company, fit_score, refinement_count, analysis_run_id,
+        )
+        return row["id"]
+
     async def get(self, job_id: UUID) -> dict | None:
         """Fetch a job application by ID."""
         pool = await get_pool()
@@ -135,8 +185,9 @@ class JobApplicationRepository:
 
 
 def _row_to_dict(row) -> dict:
-    """Convert an asyncpg Record to a dict with JSON-parsed fit_analysis."""
+    """Convert an asyncpg Record to a dict, JSON-decoding JSONB string fields."""
     d = dict(row)
-    if d.get("fit_analysis") and isinstance(d["fit_analysis"], str):
-        d["fit_analysis"] = json.loads(d["fit_analysis"])
+    for key in ("fit_analysis", "critic_feedback"):
+        if d.get(key) and isinstance(d[key], str):
+            d[key] = json.loads(d[key])
     return d
