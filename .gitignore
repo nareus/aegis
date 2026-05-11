@@ -14,6 +14,11 @@ wheels/
 .env.local
 .env.*.local
 
+# Personal profile -- contains private info; commit the example instead
+profile.yaml
+profile.*.yaml
+!profile.example.yaml
+
 # Test / coverage
 .pytest_cache/
 .coverage

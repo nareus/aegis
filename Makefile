@@ -1,4 +1,4 @@
-.PHONY: help start setup doctor api mcp stop restart migrate logs reset install
+.PHONY: help start setup doctor api mcp stop restart migrate logs reset install eval seed-evals
 
 # Default target
 help:
@@ -12,6 +12,8 @@ help:
 	@echo "  make stop       Stop postgres + redis  (data is preserved)"
 	@echo "  make restart    Restart infra"
 	@echo "  make migrate    Apply any new SQL migrations"
+	@echo "  make seed-evals Mirror evals/*/cases/*.yaml into eval_golden_cases"
+	@echo "  make eval NAME=<eval_name>  Run an eval suite (e.g. NAME=job_fit_v1)"
 	@echo "  make logs       Tail postgres + redis logs"
 	@echo "  make reset      ⚠  Wipe ALL local data and start fresh"
 	@echo ""
@@ -82,6 +84,16 @@ migrate:
 
 logs:
 	docker compose logs -f postgres redis
+
+seed-evals:
+	uv run python scripts/seed_evals.py
+
+eval:
+	@if [ -z "$(NAME)" ]; then \
+		echo "  Usage: make eval NAME=<eval_name>  (e.g. NAME=job_fit_v1)"; \
+		exit 1; \
+	fi
+	uv run python scripts/run_eval.py $(NAME)
 
 reset:
 	@echo "⚠  This will DELETE all your data (jobs, briefings, traces)."

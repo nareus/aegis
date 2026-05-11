@@ -1,0 +1,32 @@
+case_id: ios_engineer_skip
+eval_name: job_fit_v1
+notes: |
+  iOS / Swift role with no backend or AI overlap. The analyst should recommend
+  "skip" with a low fit_score. Catches false-positives where the LLM latches
+  onto generic engineering keywords.
+
+input:
+  url_or_text: |
+    Senior iOS Engineer — Lumen Health (San Francisco, on-site)
+
+    About the role
+    Lead the iOS team building our consumer-facing health app. You will own
+    the architecture and ship features in Swift end-to-end.
+
+    What you'll do
+    - Build and maintain our Swift codebase (UIKit + SwiftUI, ARKit).
+    - Drive iOS architecture: Combine, Swift Concurrency, modular targets.
+    - Mentor iOS engineers and own the App Store release process.
+
+    Required
+    - 7+ years of native iOS development in Swift.
+    - Deep knowledge of UIKit, SwiftUI, Core Data, Combine.
+    - Shipped consumer iOS apps with >1M downloads.
+    - On-site in San Francisco, 4 days/week.
+
+    Not what we're looking for
+    - Backend, web, or generalist engineers without deep iOS experience.
+
+expected:
+  recommendation: skip
+  fit_score: {min: 0.00, max: 0.35}

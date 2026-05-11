@@ -16,10 +16,10 @@ def setup_logging() -> None:
     logger.remove()
 
     if settings.is_production:
-        logger.add(sys.stdout, serialize=True, level=settings.log_level)
+        logger.add(sys.stderr, serialize=True, level=settings.log_level)
     else:
         logger.add(
-            sys.stdout,
+            sys.stderr,
             level=settings.log_level,
             format=(
                 "<green>{time:YYYY-MM-DDTHH:mm:ss}</green> | "

@@ -1,0 +1,37 @@
+case_id: stripe_senior_backend_apply
+eval_name: job_fit_v1
+notes: |
+  Strong overlap on Python + PostgreSQL, remote-friendly, no deal-breakers.
+  The analyst should recommend "apply" with fit_score >= 0.7.
+
+input:
+  url_or_text: |
+    Senior Backend Engineer — Stripe (Remote, US)
+
+    About the role
+    You will build and operate payments infrastructure used by millions of
+    businesses. The work spans high-throughput services in Python and Go,
+    PostgreSQL at scale, and event-driven systems on Kafka.
+
+    What you'll do
+    - Design and ship backend services that move billions of dollars per year.
+    - Own PostgreSQL data models, query performance, and migrations.
+    - Improve reliability through better observability and incident response.
+    - Collaborate with product engineers across the company.
+
+    Required
+    - 5+ years of backend engineering experience.
+    - Strong Python (or another modern backend language) and SQL.
+    - Experience operating distributed systems in production.
+
+    Preferred
+    - Payments / fintech domain experience.
+    - Kubernetes, Kafka, or other event-streaming systems.
+
+    Compensation: $200k–$260k base + equity. Fully remote within the US.
+
+expected:
+  recommendation: apply
+  fit_score: {min: 0.70, max: 1.00}
+  must_include_skills: [python, postgresql]
+  must_not_have_deal_breakers: true
