@@ -1,6 +1,7 @@
 """Health check endpoint."""
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from aegis.db.engine import get_pool
 
@@ -8,8 +9,8 @@ router = APIRouter()
 
 
 @router.get("/health")
-async def health():
-    """Liveness check with DB and Redis ping."""
+async def health() -> JSONResponse:
+    """Liveness check with DB and Redis ping. Returns 503 if any dependency is unhealthy."""
     checks = {"status": "ok", "db": "ok", "redis": "ok"}
 
     try:
@@ -31,4 +32,4 @@ async def health():
         checks["status"] = "degraded"
 
     status_code = 200 if checks["status"] == "ok" else 503
-    return checks if status_code == 200 else checks  # FastAPI handles status via response
+    return JSONResponse(content=checks, status_code=status_code)

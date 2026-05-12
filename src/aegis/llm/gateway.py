@@ -5,12 +5,27 @@ from typing import TYPE_CHECKING
 
 import anthropic
 from loguru import logger
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from aegis.config import settings
 from aegis.logging import estimate_cost
 
 if TYPE_CHECKING:
     from aegis.tracing.spans import SpanRecord
+
+
+_RETRYABLE_ANTHROPIC_ERRORS = (
+    anthropic.APIConnectionError,
+    anthropic.APITimeoutError,
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+)
 
 
 @dataclass
@@ -31,10 +46,19 @@ class BudgetExceededError(Exception):
 class LLMGateway:
     """Thin wrapper around the Anthropic SDK with cost tracking and budget enforcement."""
 
-    def __init__(self, budget_usd: float | None = None) -> None:
+    def __init__(
+        self,
+        budget_usd: float | None = None,
+        daily_budget_usd: float | None = None,
+    ) -> None:
         self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         self._model = settings.aegis_llm_model
         self._budget_usd = budget_usd or settings.aegis_llm_max_cost_usd_per_run
+        self._daily_budget_usd = (
+            daily_budget_usd
+            if daily_budget_usd is not None
+            else settings.aegis_llm_max_cost_usd_per_day
+        )
         self._spent_usd: float = 0.0
         self._calls: list[LLMResult] = []
 
@@ -68,8 +92,9 @@ class LLMGateway:
             raise BudgetExceededError(
                 f"Budget exhausted: ${self._spent_usd:.4f} >= ${self._budget_usd:.4f}"
             )
+        await self._check_daily_budget()
 
-        response = await self._client.messages.create(
+        response = await self._create_message(
             model=self._model,
             max_tokens=max_tokens,
             temperature=temperature,
@@ -111,3 +136,30 @@ class LLMGateway:
             logger.warning("Budget exhausted after this call")
 
         return result
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=20),
+        retry=retry_if_exception_type(_RETRYABLE_ANTHROPIC_ERRORS),
+        before_sleep=before_sleep_log(logger, "WARNING"),  # type: ignore[arg-type]
+        reraise=True,
+    )
+    async def _create_message(self, **kwargs):
+        return await self._client.messages.create(**kwargs)
+
+    async def _check_daily_budget(self) -> None:
+        """Raise BudgetExceededError if aggregate spend in the last 24h exceeds the cap."""
+        if self._daily_budget_usd <= 0:
+            return  # disabled
+        from aegis.db.engine import get_pool
+
+        pool = await get_pool()
+        today_usd = await pool.fetchval(
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM agent_traces "
+            "WHERE started_at > NOW() - INTERVAL '24 hours'"
+        )
+        if float(today_usd) >= self._daily_budget_usd:
+            raise BudgetExceededError(
+                f"Daily LLM budget exhausted: "
+                f"${float(today_usd):.4f} >= ${self._daily_budget_usd:.4f} (last 24h)"
+            )

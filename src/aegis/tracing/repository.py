@@ -55,6 +55,28 @@ class TraceRepository:
             span.completed_at,
         )
 
+    async def list_recent_runs(self, limit: int = 20) -> list[dict]:
+        """Return one summary row per run_id, newest first."""
+        pool = await get_pool()
+        rows = await pool.fetch(
+            """
+            SELECT
+                run_id,
+                MIN(workflow)              AS workflow,
+                MIN(started_at)            AS started_at,
+                MAX(completed_at)          AS completed_at,
+                COUNT(*)                   AS span_count,
+                SUM(cost_usd)              AS total_cost_usd,
+                BOOL_OR(error IS NOT NULL) AS has_error
+            FROM agent_traces
+            GROUP BY run_id
+            ORDER BY MIN(started_at) DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+        return [dict(r) for r in rows]
+
     async def get_run_tree(self, run_id: UUID) -> list[dict]:
         """Return all spans for a run, ordered for tree reconstruction."""
         pool = await get_pool()

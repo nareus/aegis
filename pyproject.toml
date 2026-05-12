@@ -18,6 +18,7 @@ dependencies = [
     "pyyaml>=6.0",
     "httpx>=0.28",
     "loguru>=0.7",
+    "tenacity>=9.0",
 ]
 
 [project.scripts]

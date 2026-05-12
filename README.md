@@ -1,19 +1,100 @@
 # Aegis
 
-Personal agent platform for SWE career growth. Tracks job applications and produces a daily briefing — exposed as MCP tools so Claude Desktop and Claude Code can act on them directly.
+A local-first, MCP-native multi-agent platform you control. Aegis ships as a
+working personal job-tracker + daily briefing for software engineers — but
+the substrate underneath (agents, tracing, evals, MCP) is built to be lifted
+into any domain where you want LLM workflows you can debug, eval, and budget.
 
-## What it does
+> Built to be read, forked, and bent to your use case. Everything happens on
+> your machine — your data, your API key, your prompts.
 
-- **Job Tracker** — paste a JD (text or URL), a multi-agent pipeline (Researcher → Analyst → Critic with a refinement loop) extracts the role, scores fit against your profile, and persists the result with full trace metadata.
-- **Daily Briefing** — LangGraph agent that fans out to GitHub, Hacker News, and your own job pipeline, prioritises items, synthesises a markdown briefing, then self-evaluates and refines if quality is low.
-- **Tracing viewer** — every workflow run gets a `run_id`; visit `/trace/{run_id}` for an HTML span tree with per-node cost, tokens, and latency.
+---
+
+## What you can do today
+
+**Out of the box** — two workflows wired end-to-end:
+
+| Workflow | What it does | Trigger |
+|---|---|---|
+| **Job tracker** | Paste a JD (text or URL). A Researcher → Analyst → Critic pipeline extracts the role, scores fit against your `profile.yaml`, and loops if the critic flags issues. Persists with cost, refinement count, and a trace link. | `add_job` MCP tool, `POST /jobs`, or curl |
+| **Daily briefing** | Fans out to GitHub (your activity + notifications), Hacker News, and your job pipeline. Prioritises items, synthesises a markdown briefing, then self-scores and refines. Falls open if a source fails. | `run_briefing` MCP tool, `POST /briefing/run`, or curl |
+
+**Inspect anything** — every LLM call emits a span. Open
+`http://localhost:8000/trace/<run_id>` for a tree of every prompt, response,
+cost, and latency, or pull the JSON at `/trace/<run_id>/json`.
+
+**Catch regressions** — YAML golden cases under `evals/<eval_name>/cases/*.yaml`
+run through the real pipeline; the runner writes a row to `eval_runs` with
+git SHA, score, and per-case detail.
+
+**Budgets that bite** — per-run cap (`AEGIS_LLM_MAX_COST_USD_PER_RUN`) and
+daily aggregate cap (`AEGIS_LLM_MAX_COST_USD_PER_DAY`) checked before every
+LLM call. Tenacity retries handle transient Anthropic / Postgres failures.
+
+---
+
+## What's actually reusable — the building blocks
+
+Aegis is small (~3k LOC). Pick what you need:
+
+- **MCP server scaffold** (`src/aegis/mcp_server.py`) — FastMCP wiring with
+  tools, resources, prompts, and a working Claude Desktop integration. Add a
+  tool by writing one `@mcp.tool()` function.
+- **Multi-agent framework** (`src/aegis/agents/`) — `AgentBase` gives every
+  agent automatic tracing, cost attribution, and uniform `AgentResult`. Drop
+  in a new agent by subclassing and writing `_run`.
+- **LangGraph workflow pattern** (`src/aegis/workflows/job_analysis/graph.py`) —
+  Researcher → Analyst → Critic with conditional refinement. Easy to copy and
+  rewire into a different shape.
+- **Tracing infra** (`src/aegis/tracing/`) — spans persisted to Postgres
+  (`agent_traces` table) with a built-in HTML viewer. No Datadog needed.
+- **Eval harness** (`scripts/run_eval.py`, `evals/*/cases/*.yaml`) — golden
+  cases as YAML, assertion-based scoring (not exact-match), regression rows
+  in `eval_runs`. Each case still produces a trace you can open.
+- **LLM gateway** (`src/aegis/llm/gateway.py`) — Anthropic direct (no
+  LangChain), with cost tracking, per-run + per-day budgets, retry on 5xx /
+  timeouts / rate-limits.
+- **FastAPI + Docker scaffolding** — health check (returns 503 when degraded
+  so Fly/Kubernetes can react), multi-stage Dockerfile, docker-compose for
+  local Postgres + Redis, Fly.toml for one-command cloud deploy.
+
+---
+
+## Adapt it to your use case
+
+The job-tracker + briefing are illustrative. The same plumbing fits any
+"fetch → analyze → critique → persist" workflow. A non-exhaustive list:
+
+| Use case | What you'd change |
+|---|---|
+| **Customer support triage** | Replace JDs with tickets; Researcher extracts intent, Analyst scores urgency/category, Critic challenges weak categorisations. Reuse `profile.yaml` as routing rules. |
+| **Lead / company scoring** | Paste a company URL; Researcher extracts firmographics, Analyst scores ICP fit, Critic looks for stale data. `top_fits` becomes top leads. |
+| **PR / code review assistant** | Source = GitHub PRs; Analyst reviews against your style guide (in `profile.yaml`), Critic catches missed issues. Persist verdicts in a `reviews` table. |
+| **Research aggregator** | Swap GitHub/HN sources for arXiv/RSS/Twitter; reuse the briefing graph as-is — just change the prompts in `llm/prompts.py`. |
+| **Personal CRM / follow-ups** | The `get_follow_ups(stale_days)` pattern works for any contact-tracking; replace `job_applications` with `contacts`, keep the rest. |
+| **Anything with a critic loop** | The refinement pattern (`AnalystAgent` re-runs with `previous_critic_feedback`) is generic. Use it wherever a single-shot LLM output isn't reliable enough. |
+
+To repurpose end-to-end, you'd typically touch:
+
+1. `migrations/00X_<your_table>.sql` — your domain table.
+2. `src/aegis/<your_domain>/repository.py` and `service.py` — CRUD facade.
+3. `src/aegis/agents/<your_agents>.py` — Researcher/Analyst/Critic equivalents.
+4. `src/aegis/workflows/<your_workflow>/graph.py` — wire them up.
+5. `src/aegis/llm/prompts.py` — domain-specific system prompts.
+6. `src/aegis/api/<your_router>.py` and `src/aegis/mcp_server.py` — expose.
+7. `evals/<your_eval_name>/cases/*.yaml` — your regression cases.
+
+Nothing else (config, tracing, cost tracking, retries, MCP machinery) needs
+to change.
+
+---
 
 ## Quick start
 
 ### Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for postgres + redis)
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for Postgres + Redis)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
 ### First-time setup
 
@@ -23,18 +104,15 @@ cd aegis
 make start
 ```
 
-`make start` will:
-1. Copy `.env.example` → `.env`
-2. Install Python dependencies
-3. Start postgres and redis in Docker
-4. Apply all database migrations
+`make start` copies `.env.example` → `.env`, installs deps, boots Postgres
+and Redis in Docker, and runs every migration in order.
 
-Then open `.env` and fill in your API keys:
+Then put your keys in `.env`:
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...     # required for all LLM features
-GITHUB_TOKEN=ghp_...             # required for GitHub briefing section
-GITHUB_USERNAME=your-handle      # GitHub user the briefing reads from
+GITHUB_TOKEN=ghp_...             # required for the briefing's GitHub section
+GITHUB_USERNAME=your-handle      # who the briefing reads activity for
 ```
 
 ### Run the API
@@ -43,15 +121,12 @@ GITHUB_USERNAME=your-handle      # GitHub user the briefing reads from
 make api
 ```
 
-Open **http://localhost:8000/docs** — interactive API docs where you can test every endpoint directly in the browser.
+Then open <http://localhost:8000/docs> — every endpoint is testable directly
+in the browser, including `POST /jobs` and `POST /briefing/run`.
 
-### Use from Claude (MCP)
+### Wire to Claude Desktop
 
-```bash
-make mcp
-```
-
-Or configure it to start automatically. Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Add this to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -70,88 +145,146 @@ Or configure it to start automatically. Add to your Claude Desktop config (`~/Li
 }
 ```
 
-For Claude Code, run `claude mcp add` or add to your project's `.mcp.json`.
+Restart Claude Desktop. The `aegis` tools show up under the connector menu.
+
+For Claude Code: `claude mcp add aegis -- uv --directory /path/to/aegis run aegis`.
+
+---
 
 ## Daily workflow
 
 ### Morning briefing
-In Claude: *"Run my daily briefing"* → triggers `run_briefing`, returns a prioritised markdown summary plus a `trace_url` you can open to inspect every LLM call. The briefing is on-demand only — there's no background scheduler, so nothing runs unless you (or Claude) call it.
+In Claude: *"Run my daily briefing"* — fires `run_briefing`, returns
+prioritised markdown with `trace_url`. There's no background scheduler;
+briefings only fire when you (or Claude) ask.
 
 ### Adding a job
-1. Copy a LinkedIn JD (or any job posting text), or grab the URL.
-2. In Claude: *"Add this job: [paste JD or URL]"*
-3. Aegis runs Researcher → Analyst → Critic. If the critic flags issues, the analyst re-runs with that feedback (up to `AEGIS_MAX_REFINEMENTS` rounds), then persists the final analysis with `fit_score`, `recommendation`, refinement count, and the run's trace pointer.
+1. Copy a job posting (text or URL).
+2. In Claude: *"Add this job: [paste]"* → `add_job` runs Researcher →
+   Analyst → Critic, loops up to `AEGIS_MAX_REFINEMENTS` rounds if the
+   critic flags issues, then persists.
 
-Or via API:
+Or curl:
 ```bash
 curl -X POST http://localhost:8000/jobs \
   -H "Content-Type: application/json" \
-  -d '{"text": "Senior Backend Engineer at Stripe...", "url": "https://linkedin.com/jobs/..."}'
+  -d '{"text": "Senior Backend Engineer at Stripe..."}'
 ```
 
 ### Inspecting a run
-- `get_trace(run_id)` from Claude returns a flat span summary.
-- `http://localhost:8000/trace/{run_id}` renders the same data as a span tree in the browser; `/trace/{run_id}/json` gives the raw payload.
+- *"List my recent Aegis runs"* in Claude → `list_recent_runs` shows
+  newest-first runs with `run_id` and trace links.
+- *"Get the trace for `<run_id>`"* → flat span summary.
+- `http://localhost:8000/trace/<run_id>` → full HTML tree with every prompt
+  and response.
+
+---
 
 ## MCP surface
 
-**Tools:** `run_briefing`, `get_latest_briefing`, `add_job`, `list_jobs`, `update_job_status`, `get_follow_ups`, `get_top_job_fits`, `get_trace`.
-**Resources:** `aegis://briefing/latest`, `aegis://jobs/summary`.
-**Prompts:** `daily_briefing_prompt`.
+**Tools**
+
+| Tool | What it does |
+|---|---|
+| `run_briefing` | Run a full briefing, return markdown + cost + trace pointer |
+| `get_latest_briefing` | Most recent successful briefing |
+| `add_job` | Run the multi-agent pipeline on a JD, persist + return analysis |
+| `list_jobs` | List tracked jobs, optionally filtered by status |
+| `update_job_status` | Move a job through the pipeline (saved → applied → …) |
+| `get_follow_ups` | Stale-for-N-days jobs that need a nudge |
+| `get_top_job_fits` | Saved jobs with `fit_score >= min_score` |
+| `get_trace` | Span summary for a `run_id` |
+| `list_recent_runs` | Newest-first run summaries with trace URLs |
+
+**Resources**: `aegis://briefing/latest`, `aegis://jobs/summary`
+**Prompts**: `daily_briefing_prompt`
+
+---
+
+## Evals — keep prompts honest
+
+```bash
+make seed-evals               # mirror evals/*/cases/*.yaml → eval_golden_cases
+make eval NAME=job_fit_v1     # run the suite
+```
+
+Each YAML case declares assertions against the analysis (not exact-match
+output, since LLMs aren't deterministic):
+
+```yaml
+case_id: stripe_senior_backend_apply
+eval_name: job_fit_v1
+input:
+  url_or_text: |
+    Senior Backend Engineer — Stripe (Remote, US) ...
+expected:
+  recommendation: apply
+  fit_score: {min: 0.70, max: 1.00}
+  must_include_skills: [python, postgresql]
+  must_not_have_deal_breakers: true
+```
+
+The runner writes a row to `eval_runs` per invocation (git SHA, score,
+pass count, per-case detail). Diff successive runs to track prompt
+regressions.
+
+When you hit a bad output in `agent_traces`, the recipe is: copy the JD
+into a new case file with the correct `expected`, re-seed, re-run, fix the
+prompt until it passes.
+
+---
 
 ## All commands
 
 | Command | What it does |
 |---|---|
-| `make start` | First-time setup: install, start infra, migrate |
-| `make api` | Start REST API at http://localhost:8000 |
-| `make mcp` | Start MCP server for Claude |
-| `make doctor` | Check prerequisites and config |
-| `make stop` | Stop postgres + redis (data preserved) |
-| `make restart` | Restart infra |
+| `make start` | First-time setup |
+| `make doctor` | Check prerequisites + config |
+| `make api` | Start REST API |
+| `make mcp` | Start MCP server (stdio) |
+| `make seed-evals` | Mirror YAML golden cases into Postgres |
+| `make eval NAME=…` | Run an eval suite end-to-end |
 | `make migrate` | Apply new SQL migrations |
-| `make logs` | Tail postgres + redis logs |
-| `make reset` | ⚠ Wipe all data and start fresh |
+| `make stop` / `restart` | Stop / restart Docker infra (data preserved) |
+| `make logs` | Tail Postgres + Redis logs |
+| `make reset` | ⚠ Wipe ALL local data |
 
-## Data persistence
-
-Your data lives in Docker named volumes (`aegis_postgres_data`, `aegis_redis_data`). It survives:
-- `make stop` / `make start`
-- Machine reboots
-- Docker Desktop restarts
-
-The only thing that wipes it is `make reset` (which asks for confirmation).
+---
 
 ## Profile configuration
 
-Edit `profile.yaml` (copied from `profile.example.yaml`) to tune fit scoring to your background:
+`profile.yaml` (copied from `profile.example.yaml`) drives fit-scoring and
+briefing personalisation. It's git-ignored — the example is committed so
+you can see the shape.
 
 ```yaml
-skills:
-  - python
-  - golang
-  - distributed-systems
-target_roles:
-  - backend-engineer
-  - ai-engineer
+skills: [python, golang, distributed-systems]
+target_roles: [backend-engineer, ai-engineer]
 experience_years: 3
-preferred_locations:
-  - singapore
-  - remote
-deal_breakers:
-  - php
-  - wordpress
+preferred_locations: [singapore, remote]
+deal_breakers: [php, wordpress]
+summary: |
+  Backend engineer with 3 years of experience building distributed
+  systems in Python and Go. Interested in AI / agent platforms.
 ```
 
-Point `AEGIS_PROFILE_PATH` at a different file if you want to keep the profile outside the repo.
+Point `AEGIS_PROFILE_PATH` at a different path to keep your profile outside
+the repo.
+
+---
 
 ## Tuning
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `AEGIS_LLM_MODEL` | `claude-sonnet-4-5` | Anthropic model used by every agent |
-| `AEGIS_LLM_MAX_COST_USD_PER_RUN` | `0.50` | Hard budget per gateway instance — raises `BudgetExceededError` |
-| `AEGIS_MAX_REFINEMENTS` | `2` | Max critic→analyst loops before the job analysis finalises |
+| `AEGIS_LLM_MODEL` | `claude-sonnet-4-5` | Anthropic model for every agent |
+| `AEGIS_LLM_MAX_COST_USD_PER_RUN` | `0.50` | Hard cap per gateway instance |
+| `AEGIS_LLM_MAX_COST_USD_PER_DAY` | `5.0` | Aggregate cap across the last 24h (0 disables) |
+| `AEGIS_MAX_REFINEMENTS` | `2` | Max critic ⇄ analyst loops |
+| `AEGIS_PROFILE_PATH` | `./profile.yaml` | Where the candidate profile lives |
+| `LOG_LEVEL` | `INFO` | Loguru level — `DEBUG` for verbose tracing |
+
+---
 
 ## Project structure
 
@@ -160,30 +293,59 @@ aegis/
 ├── src/aegis/
 │   ├── agents/          # Researcher, Analyst, Critic + auto-tracing base class
 │   ├── workflows/
-│   │   └── job_analysis/  # LangGraph wiring + service for the job-analysis pipeline
-│   ├── briefing/        # LangGraph daily briefing agent (nodes, graph, service)
+│   │   └── job_analysis/   # LangGraph wiring + service
+│   ├── briefing/        # LangGraph daily-briefing nodes + graph + service
 │   ├── jobs/            # Job service facade exposed by API and MCP
 │   ├── sources/         # GitHub, HN, internal jobs source for the briefing
-│   ├── llm/             # Anthropic gateway + prompts (cost-tracked, budget-capped)
-│   ├── tracing/         # Span recorder, repository, HTML viewer
+│   ├── llm/             # Anthropic gateway (cost-tracked, budget-capped, retrying)
+│   ├── tracing/         # Span recorder + repository + HTML viewer
 │   ├── db/              # asyncpg engine + repositories
 │   ├── api/             # FastAPI routers (jobs, briefing, traces, health)
 │   ├── app.py           # FastAPI factory
 │   └── mcp_server.py    # FastMCP server (tools, resources, prompts)
-├── migrations/          # Numbered SQL migrations (applied in order)
+├── migrations/          # Numbered SQL migrations
+├── evals/               # YAML golden cases per eval_name
+├── scripts/
+│   ├── seed_evals.py    # YAML → eval_golden_cases
+│   └── run_eval.py      # Run a suite, write eval_runs
 ├── tests/
-│   ├── unit/
-│   └── integration/
+│   ├── unit/            # Mocked LLM, no infra
+│   └── integration/     # testcontainers, real Postgres
 ├── Makefile
-├── Dockerfile
+├── Dockerfile           # Multi-stage, non-root user
 ├── docker-compose.yml
-└── fly.toml             # Fly.io deployment (optional)
+└── fly.toml             # Fly.io deploy (optional)
 ```
 
-## Running tests
+---
+
+## Tests
 
 ```bash
-uv run pytest
+uv run pytest                  # full suite, all network mocked
+uv run pytest tests/unit/      # fast, no Docker
+uv run pytest tests/integration/ -v   # spins up Postgres via testcontainers
 ```
 
-All network calls are mocked, so the suite runs without API keys or live infra.
+---
+
+## What's deliberately not here (yet)
+
+So you know what you're signing up for:
+
+- **No background scheduler** — briefings run only when triggered.
+- **No auth on the FastAPI surface** — assume loopback / firewalled. Add an
+  API-key middleware before exposing publicly.
+- **No SSRF allow-list in the researcher fetch** — fine for trusted local
+  use; restrict before exposing to untrusted JD URLs.
+- **No LangGraph checkpointing** — a pod restart mid-workflow loses the run.
+- **No multi-tenancy** — single profile, single user, single DB.
+
+These are intentional cuts for a local-first tool. The "deployment gaps"
+section in the engineering docs covers what changes if you want any of them.
+
+---
+
+## License
+
+MIT. Fork it, rewire it, ship it.

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     aegis_llm_model: str = "claude-sonnet-4-5"
     aegis_llm_max_cost_usd_per_run: float = 0.50
+    aegis_llm_max_cost_usd_per_day: float = 5.0    # 0 disables the daily cap
 
     # Workflows
     aegis_max_refinements: int = 2

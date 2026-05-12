@@ -6,7 +6,7 @@ run_migrations() {
     echo "[entrypoint] Running database migrations..."
     for f in /app/migrations/*.sql; do
         echo "[entrypoint]   Applying $f"
-        psql "$DATABASE_URL" -f "$f" 2>/dev/null || true
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
     done
     echo "[entrypoint] Migrations done."
 }

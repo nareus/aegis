@@ -81,6 +81,37 @@ async def add_job(text: str, url: str = "") -> dict:
 
 
 @mcp.tool()
+async def list_recent_runs(limit: int = 20) -> list[dict]:
+    """List the most recent workflow runs (job analyses and briefings).
+
+    Useful for finding `run_id` values to pass to `get_trace`, or for spotting
+    failed runs in the recent history.
+
+    Args:
+        limit: Max number of runs to return (default 20).
+
+    Returns:
+        Newest-first list of {run_id, workflow, started_at, span_count,
+        total_cost_usd, has_error, trace_url}.
+    """
+    from aegis.tracing.repository import TraceRepository
+
+    runs = await TraceRepository().list_recent_runs(limit=limit)
+    return [
+        {
+            "run_id": str(r["run_id"]),
+            "workflow": r["workflow"],
+            "started_at": r["started_at"].isoformat() if r["started_at"] else None,
+            "span_count": r["span_count"],
+            "total_cost_usd": float(r["total_cost_usd"]) if r["total_cost_usd"] else 0.0,
+            "has_error": bool(r["has_error"]),
+            "trace_url": f"/trace/{r['run_id']}",
+        }
+        for r in runs
+    ]
+
+
+@mcp.tool()
 async def get_trace(run_id: str) -> dict:
     """Return a trace summary for a workflow run.
 
