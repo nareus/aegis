@@ -60,35 +60,6 @@ Aegis is small (~3k LOC). Pick what you need:
 
 ---
 
-## Adapt it to your use case
-
-The job-tracker + briefing are illustrative. The same plumbing fits any
-"fetch → analyze → critique → persist" workflow. A non-exhaustive list:
-
-| Use case | What you'd change |
-|---|---|
-| **Customer support triage** | Replace JDs with tickets; Researcher extracts intent, Analyst scores urgency/category, Critic challenges weak categorisations. Reuse `profile.yaml` as routing rules. |
-| **Lead / company scoring** | Paste a company URL; Researcher extracts firmographics, Analyst scores ICP fit, Critic looks for stale data. `top_fits` becomes top leads. |
-| **PR / code review assistant** | Source = GitHub PRs; Analyst reviews against your style guide (in `profile.yaml`), Critic catches missed issues. Persist verdicts in a `reviews` table. |
-| **Research aggregator** | Swap GitHub/HN sources for arXiv/RSS/Twitter; reuse the briefing graph as-is — just change the prompts in `llm/prompts.py`. |
-| **Personal CRM / follow-ups** | The `get_follow_ups(stale_days)` pattern works for any contact-tracking; replace `job_applications` with `contacts`, keep the rest. |
-| **Anything with a critic loop** | The refinement pattern (`AnalystAgent` re-runs with `previous_critic_feedback`) is generic. Use it wherever a single-shot LLM output isn't reliable enough. |
-
-To repurpose end-to-end, you'd typically touch:
-
-1. `migrations/00X_<your_table>.sql` — your domain table.
-2. `src/aegis/<your_domain>/repository.py` and `service.py` — CRUD facade.
-3. `src/aegis/agents/<your_agents>.py` — Researcher/Analyst/Critic equivalents.
-4. `src/aegis/workflows/<your_workflow>/graph.py` — wire them up.
-5. `src/aegis/llm/prompts.py` — domain-specific system prompts.
-6. `src/aegis/api/<your_router>.py` and `src/aegis/mcp_server.py` — expose.
-7. `evals/<your_eval_name>/cases/*.yaml` — your regression cases.
-
-Nothing else (config, tracing, cost tracking, retries, MCP machinery) needs
-to change.
-
----
-
 ## Quick start
 
 ### Prerequisites
