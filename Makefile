@@ -18,8 +18,8 @@ help:
 	@echo "  make fmt                        ruff format"
 	@echo ""
 	@echo "  make build                      Build wheel + sdist into dist/"
-	@echo "  make publish-test               Publish to TestPyPI (needs TESTPYPI_TOKEN)"
-	@echo "  make publish                    Publish to PyPI    (needs PYPI_TOKEN, with confirm)"
+	@echo "  make publish-test               Publish to TestPyPI (needs UV_PUBLISH_TOKEN)"
+	@echo "  make publish                    Publish to PyPI    (needs UV_PUBLISH_TOKEN, with confirm)"
 	@echo ""
 	@echo "  End users run 'aegis init', 'aegis up', etc. -- see README."
 	@echo ""
@@ -62,19 +62,21 @@ build:
 	uv build
 
 publish-test: build
-	@if [ -z "$(TESTPYPI_TOKEN)" ]; then \
-		echo "  TESTPYPI_TOKEN is not set."; \
-		echo "  Get one at https://test.pypi.org/manage/account/token/"; \
+	@if [ -z "$$UV_PUBLISH_TOKEN" ]; then \
+		echo "  UV_PUBLISH_TOKEN is not set."; \
+		echo "  Get a token at https://test.pypi.org/manage/account/token/"; \
+		echo "  Then: export UV_PUBLISH_TOKEN=pypi-..."; \
 		exit 1; \
 	fi
-	uv publish --publish-url https://test.pypi.org/legacy/ --token $(TESTPYPI_TOKEN)
+	uv publish --publish-url https://test.pypi.org/legacy/
 
 publish: build
-	@if [ -z "$(PYPI_TOKEN)" ]; then \
-		echo "  PYPI_TOKEN is not set."; \
-		echo "  Get one at https://pypi.org/manage/account/token/"; \
+	@if [ -z "$$UV_PUBLISH_TOKEN" ]; then \
+		echo "  UV_PUBLISH_TOKEN is not set."; \
+		echo "  Get a project-scoped token at https://pypi.org/manage/account/token/"; \
+		echo "  Then: export UV_PUBLISH_TOKEN=pypi-..."; \
 		exit 1; \
 	fi
 	@echo "WARNING  About to publish to PyPI (real, public, irrevocable for this version)."
 	@read -p "         Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ]
-	uv publish --token $(PYPI_TOKEN)
+	uv publish
