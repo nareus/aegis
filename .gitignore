@@ -34,3 +34,6 @@ htmlcov/
 
 # Ruff / linting
 .ruff_cache/
+
+# Local working notes -- not part of the project history
+NEXT_STEPS.md

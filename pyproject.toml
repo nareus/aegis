@@ -1,6 +1,6 @@
 [project]
 name = "aegis-agents"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local-first, MCP-native multi-agent platform — job tracker + daily briefing for software engineers, with tracing, evals, and budgets."
 readme = "README.md"
 requires-python = ">=3.12"

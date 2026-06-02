@@ -184,6 +184,7 @@ async def _wait_for_postgres(timeout_s: int = 30) -> bool:
 
 
 def cmd_up(_args: argparse.Namespace) -> int:
+    del _args
     _require_docker()
     if not _compose_path().exists():
         _err(f"{_compose_path()} not found. Run `aegis init` first.")
@@ -213,6 +214,7 @@ def cmd_up(_args: argparse.Namespace) -> int:
 # ─── Subcommand: down ─────────────────────────────────────────────────────────
 
 def cmd_down(_args: argparse.Namespace) -> int:
+    del _args
     _require_docker()
     if not _compose_path().exists():
         _err(f"{_compose_path()} not found. Run `aegis init` first.")
@@ -223,6 +225,7 @@ def cmd_down(_args: argparse.Namespace) -> int:
 # ─── Subcommand: migrate ──────────────────────────────────────────────────────
 
 def cmd_migrate(_args: argparse.Namespace) -> int:
+    del _args
     from aegis.db.migrate import run_migrations_sync
     newly, total = run_migrations_sync()
     _ok(f"Migrations: {newly} newly applied, {total} total")
@@ -232,6 +235,7 @@ def cmd_migrate(_args: argparse.Namespace) -> int:
 # ─── Subcommand: doctor ───────────────────────────────────────────────────────
 
 def cmd_doctor(_args: argparse.Namespace) -> int:
+    del _args
     from aegis.config import settings
 
     _say()
