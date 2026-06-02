@@ -19,9 +19,9 @@ into any domain where you want LLM workflows you can debug, eval, and budget.
 | **Job tracker** | Paste a JD (text or URL). A Researcher → Analyst → Critic pipeline extracts the role, scores fit against your `profile.yaml`, and loops if the critic flags issues. Persists with cost, refinement count, and a trace link. | `add_job` MCP tool, `POST /jobs`, or curl |
 | **Daily briefing** | Fans out to GitHub (your activity + notifications), Hacker News, and your job pipeline. Prioritises items, synthesises a markdown briefing, then self-scores and refines. Falls open if a source fails. | `run_briefing` MCP tool, `POST /briefing/run`, or curl |
 
-**Inspect anything** — every LLM call emits a span. Open
-`http://localhost:8000/trace/<run_id>` for a tree of every prompt, response,
-cost, and latency, or pull the JSON at `/trace/<run_id>/json`.
+**Inspect anything** — every LLM call emits a span. Run `aegis api` and
+open `http://localhost:8000/trace/<run_id>` for a tree of every prompt,
+response, cost, and latency, or pull the JSON at `/trace/<run_id>/json`.
 
 **Catch regressions** — YAML golden cases under `evals/<eval_name>/cases/*.yaml`
 run through the real pipeline; the runner writes a row to `eval_runs` with
@@ -54,9 +54,9 @@ Aegis is small (~3k LOC). Pick what you need:
 - **LLM gateway** (`src/aegis/llm/gateway.py`) — Anthropic direct (no
   LangChain), with cost tracking, per-run + per-day budgets, retry on 5xx /
   timeouts / rate-limits.
-- **FastAPI + Docker scaffolding** — health check (returns 503 when degraded
-  so Fly/Kubernetes can react), multi-stage Dockerfile, docker-compose for
-  local Postgres + Redis, Fly.toml for one-command cloud deploy.
+- **FastAPI surface** (`src/aegis/app.py`, `src/aegis/api/`) — REST routers
+  for jobs, briefing, traces, health. Exposed via `aegis api`. Health check
+  returns 503 when degraded.
 
 ---
 
@@ -64,61 +64,62 @@ Aegis is small (~3k LOC). Pick what you need:
 
 ### Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for Postgres + Redis)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — Aegis runs Postgres + Redis locally.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **Anthropic API key** — required. Generate at <https://console.anthropic.com/settings/keys>.
+- **GitHub personal access token** — optional, only for the daily briefing.
+  Generate at <https://github.com/settings/tokens>. Classic token needs the
+  `notifications` scope; fine-grained needs `Notifications: Read`. Without
+  it, briefings still run but skip the GitHub section.
 
-### First-time setup
-
-```bash
-git clone https://github.com/nareus/aegis
-cd aegis
-make start
-```
-
-`make start` copies `.env.example` → `.env`, installs deps, boots Postgres
-and Redis in Docker, and runs every migration in order.
-
-Then put your keys in `.env`:
+### Install
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...     # required for all LLM features
-GITHUB_TOKEN=ghp_...             # required for the briefing's GitHub section
-GITHUB_USERNAME=your-handle      # who the briefing reads activity for
+uv tool install aegis-agents
+aegis init          # prompts for ANTHROPIC_API_KEY + GITHUB_TOKEN (optional)
+aegis up            # boots Postgres + Redis, applies migrations
 ```
 
-### Run the API
+`aegis init` writes `~/.config/aegis/{.env,compose.yml,profile.yaml}`. Re-run
+with `--force` to regenerate. Override the location with `AEGIS_HOME=/path`.
+
+Edit `~/.config/aegis/profile.yaml` to personalise fit scoring (skills, target
+roles, deal-breakers).
+
+### Wire to Claude
+
+**Claude Code:**
 
 ```bash
-make api
+claude mcp add aegis -- aegis serve
 ```
 
-Then open <http://localhost:8000/docs> — every endpoint is testable directly
-in the browser, including `POST /jobs` and `POST /briefing/run`.
-
-### Wire to Claude Desktop
-
-Add this to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+**Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "aegis": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/aegis", "run", "aegis"],
-      "env": {
-        "ANTHROPIC_API_KEY": "sk-ant-...",
-        "DATABASE_URL": "postgresql://aegis:aegis@localhost:5432/aegis",
-        "REDIS_URL": "redis://localhost:6379/0",
-        "GITHUB_TOKEN": "ghp_..."
-      }
+      "command": "aegis",
+      "args": ["serve"]
     }
   }
 }
 ```
 
-Restart Claude Desktop. The `aegis` tools show up under the connector menu.
+Restart Claude. The `aegis` tools show up under the connector menu.
 
-For Claude Code: `claude mcp add aegis -- uv --directory /path/to/aegis run aegis`.
+### Daily ops
+
+| Command | What it does |
+|---|---|
+| `aegis up` | Start Postgres + Redis (data preserved across restarts) |
+| `aegis down` | Stop the stack |
+| `aegis migrate` | Apply new migrations after an `aegis-agents` upgrade |
+| `aegis doctor` | Diagnose prerequisites, config, and infra |
+| `aegis serve` | Run the MCP server (what Claude calls) |
+| `aegis api` | Run the REST API + trace viewer at <http://localhost:8000/docs> |
+| `aegis init --force` | Regenerate `~/.config/aegis/` files |
 
 ---
 
@@ -135,7 +136,7 @@ briefings only fire when you (or Claude) ask.
    Analyst → Critic, loops up to `AEGIS_MAX_REFINEMENTS` rounds if the
    critic flags issues, then persists.
 
-Or curl:
+Or curl (requires `aegis api` running):
 ```bash
 curl -X POST http://localhost:8000/jobs \
   -H "Content-Type: application/json" \
@@ -146,8 +147,8 @@ curl -X POST http://localhost:8000/jobs \
 - *"List my recent Aegis runs"* in Claude → `list_recent_runs` shows
   newest-first runs with `run_id` and trace links.
 - *"Get the trace for `<run_id>`"* → flat span summary.
-- `http://localhost:8000/trace/<run_id>` → full HTML tree with every prompt
-  and response.
+- With `aegis api` running, `http://localhost:8000/trace/<run_id>` →
+  full HTML tree with every prompt and response.
 
 ---
 
@@ -174,9 +175,12 @@ curl -X POST http://localhost:8000/jobs \
 
 ## Evals — keep prompts honest
 
+The eval harness is maintainer tooling — it ships in the repo, not the
+package. Clone the repo and run:
+
 ```bash
-make seed-evals               # mirror evals/*/cases/*.yaml → eval_golden_cases
-make eval NAME=job_fit_v1     # run the suite
+uv run python scripts/seed_evals.py             # mirror evals/*/cases/*.yaml → eval_golden_cases
+uv run python scripts/run_eval.py job_fit_v1    # run the suite
 ```
 
 Each YAML case declares assertions against the analysis (not exact-match
@@ -205,28 +209,10 @@ prompt until it passes.
 
 ---
 
-## All commands
-
-| Command | What it does |
-|---|---|
-| `make start` | First-time setup |
-| `make doctor` | Check prerequisites + config |
-| `make api` | Start REST API |
-| `make mcp` | Start MCP server (stdio) |
-| `make seed-evals` | Mirror YAML golden cases into Postgres |
-| `make eval NAME=…` | Run an eval suite end-to-end |
-| `make migrate` | Apply new SQL migrations |
-| `make stop` / `restart` | Stop / restart Docker infra (data preserved) |
-| `make logs` | Tail Postgres + Redis logs |
-| `make reset` | ⚠ Wipe ALL local data |
-
----
-
 ## Profile configuration
 
-`profile.yaml` (copied from `profile.example.yaml`) drives fit-scoring and
-briefing personalisation. It's git-ignored — the example is committed so
-you can see the shape.
+`aegis init` writes `~/.config/aegis/profile.yaml` from the bundled
+template. Edit it to personalise fit-scoring and briefing output:
 
 ```yaml
 skills: [python, golang, distributed-systems]
@@ -239,8 +225,8 @@ summary: |
   systems in Python and Go. Interested in AI / agent platforms.
 ```
 
-Point `AEGIS_PROFILE_PATH` at a different path to keep your profile outside
-the repo.
+Set `AEGIS_PROFILE_PATH=/some/other/path.yaml` to point Aegis at a
+profile outside the default location.
 
 ---
 
@@ -252,7 +238,7 @@ the repo.
 | `AEGIS_LLM_MAX_COST_USD_PER_RUN` | `0.50` | Hard cap per gateway instance |
 | `AEGIS_LLM_MAX_COST_USD_PER_DAY` | `5.0` | Aggregate cap across the last 24h (0 disables) |
 | `AEGIS_MAX_REFINEMENTS` | `2` | Max critic ⇄ analyst loops |
-| `AEGIS_PROFILE_PATH` | `./profile.yaml` | Where the candidate profile lives |
+| `AEGIS_PROFILE_PATH` | `~/.config/aegis/profile.yaml` | Where the candidate profile lives |
 | `LOG_LEVEL` | `INFO` | Loguru level — `DEBUG` for verbose tracing |
 
 ---
@@ -282,21 +268,33 @@ aegis/
 ├── tests/
 │   ├── unit/            # Mocked LLM, no infra
 │   └── integration/     # testcontainers, real Postgres
-├── Makefile
-├── Dockerfile           # Multi-stage, non-root user
-├── docker-compose.yml
-└── fly.toml             # Fly.io deploy (optional)
+└── pyproject.toml
 ```
 
 ---
 
-## Tests
+## Development
+
+Working on Aegis itself (rather than using it):
 
 ```bash
-uv run pytest                  # full suite, all network mocked
-uv run pytest tests/unit/      # fast, no Docker
-uv run pytest tests/integration/ -v   # spins up Postgres via testcontainers
+git clone https://github.com/nareus/aegis
+cd aegis
+uv sync                                # install deps + dev tools
+aegis init                             # one-time, sets up ~/.config/aegis/
+aegis up                               # start Postgres + Redis
+
+uv run python -m aegis.cli serve       # run MCP server from source
+uv run pytest                          # full suite, all network mocked
+uv run pytest tests/unit/              # fast, no Docker
+uv run pytest tests/integration/ -v    # spins up Postgres via testcontainers
+
+uv run python scripts/seed_evals.py    # mirror eval cases to Postgres
+uv run python scripts/run_eval.py job_fit_v1
 ```
+
+`scripts/` and `evals/` ship in the repo for regression testing and aren't
+bundled into the published package.
 
 ---
 
@@ -312,8 +310,7 @@ So you know what you're signing up for:
 - **No LangGraph checkpointing** — a pod restart mid-workflow loses the run.
 - **No multi-tenancy** — single profile, single user, single DB.
 
-These are intentional cuts for a local-first tool. The "deployment gaps"
-section in the engineering docs covers what changes if you want any of them.
+These are intentional cuts for a local-first tool.
 
 ---
 

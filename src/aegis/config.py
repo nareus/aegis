@@ -1,12 +1,28 @@
 """Application configuration via environment variables."""
 
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
 
+def _aegis_home() -> Path:
+    """Resolve AEGIS_HOME — where tool-mode keeps .env, profile, compose, data."""
+    env = os.environ.get("AEGIS_HOME")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / ".config" / "aegis"
+
+
+AEGIS_HOME = _aegis_home()
+
+
 class Settings(BaseSettings):
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {
+        "env_file": str(AEGIS_HOME / ".env"),
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
     # Core
     aegis_env: str = "local"
@@ -22,7 +38,7 @@ class Settings(BaseSettings):
     aegis_max_refinements: int = 2
 
     # Profile (path to YAML; see profile.example.yaml)
-    aegis_profile_path: str = "./profile.yaml"
+    aegis_profile_path: str = str(AEGIS_HOME / "profile.yaml")
 
     # Data sources
     github_token: str = ""
