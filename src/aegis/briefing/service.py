@@ -4,15 +4,26 @@ import time
 
 from loguru import logger
 
+from aegis.briefing.agents import (
+    EvaluatorAgent,
+    PrioritizerAgent,
+    SynthesizerAgent,
+)
 from aegis.briefing.graph import build_briefing_graph
 from aegis.briefing.state import BriefingState
+from aegis.llm.gateway import LLMGateway
 
 
 class BriefingService:
     """Coordinates briefing runs. Both trigger paths (MCP, API) go through here."""
 
-    def __init__(self) -> None:
-        self._graph = build_briefing_graph()
+    def __init__(self, gateway: LLMGateway | None = None) -> None:
+        gw = gateway or LLMGateway()
+        self._graph = build_briefing_graph(
+            PrioritizerAgent(gw),
+            SynthesizerAgent(gw),
+            EvaluatorAgent(gw),
+        )
 
     async def run(self, trigger_source: str = "api") -> dict:
         """Execute a full briefing run.

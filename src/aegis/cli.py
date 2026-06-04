@@ -11,20 +11,21 @@ import argparse
 import asyncio
 import getpass
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
-from importlib.resources import files
 from pathlib import Path
 
+from aegis._assets import path as _asset_path
 from aegis.config import AEGIS_HOME
 
 
 # ─── Asset helpers ────────────────────────────────────────────────────────────
 
 def _asset_bytes(name: str) -> bytes:
-    return files("aegis._assets").joinpath(name).read_bytes()
+    return _asset_path(name).read_bytes()
 
 
 def _compose_path() -> Path:
@@ -75,11 +76,27 @@ def _compose(*args: str) -> int:
 
 # ─── Subcommand: init ─────────────────────────────────────────────────────────
 
+_ANSI_ESC_RE = re.compile(r"\x1b(?:\[[0-9;?]*[@-~]|O[A-Z])")
+_CTRL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _sanitize_prompt_input(s: str) -> str:
+    """Strip ANSI escape sequences (arrow keys etc.) and bare control bytes.
+
+    getpass() doesn't do line editing, so cursor-movement keystrokes land
+    in the input verbatim. For tokens/keys (printable ASCII only), this
+    is always wrong; for usernames, also always wrong.
+    """
+    s = _ANSI_ESC_RE.sub("", s)
+    s = _CTRL_CHARS_RE.sub("", s)
+    return s.strip()
+
+
 def _prompt(label: str, default: str = "", secret: bool = False) -> str:
     suffix = f" [{default}]" if default else ""
     prompt = f"  {label}{suffix}: "
     val = getpass.getpass(prompt) if secret else input(prompt)
-    return val.strip() or default
+    return _sanitize_prompt_input(val) or default
 
 
 def _write_env(api_key: str, gh_token: str, gh_user: str) -> None:

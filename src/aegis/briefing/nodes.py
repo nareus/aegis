@@ -3,9 +3,12 @@
 Each node is an async function: async def node(state: BriefingState) -> partial state dict.
 Nodes are pure-ish: they read from state, do work, and return a partial update.
 Side effects (DB writes) are confined to init_run and persist.
+
+LLM steps (prioritize, synthesize, self_evaluate) are AgentBase subclasses in
+briefing/agents.py; the graph wraps each one in a node factory so cost +
+spans flow through Tracer rather than being added here.
 """
 
-import json
 import time
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -14,15 +17,6 @@ from loguru import logger
 
 from aegis.briefing.state import BriefingState
 from aegis.db.repository import BriefingRunRepository
-from aegis.llm.gateway import LLMGateway, BudgetExceededError
-from aegis.llm.prompts import (
-    PRIORITIZE_SYSTEM,
-    PRIORITIZE_USER,
-    SYNTHESIZE_SYSTEM,
-    SYNTHESIZE_USER,
-    EVALUATE_SYSTEM,
-    EVALUATE_USER,
-)
 from aegis.sources.base import SourceResult
 from aegis.sources.github import GitHubSource
 from aegis.sources.hn import HackerNewsSource
@@ -111,90 +105,10 @@ def route_after_fetches(state: BriefingState) -> str:
 
 
 # --- LLM nodes ---
-
-async def prioritize(state: BriefingState) -> dict:
-    """LLM call: rank and tag items by relevance."""
-    gateway = LLMGateway()
-    raw_data = json.dumps(state.get("raw", {}), indent=2, default=str)
-
-    try:
-        result = await gateway.call(
-            system=PRIORITIZE_SYSTEM,
-            user=PRIORITIZE_USER.format(raw_data=raw_data),
-            max_tokens=2048,
-        )
-        prioritized = _parse_json_safe(result.text)
-        cost = result.cost_usd
-    except BudgetExceededError:
-        logger.warning("Budget exceeded during prioritize")
-        return {"prioritized": None}
-    except Exception as e:
-        logger.warning("Prioritize failed: {}", str(e))
-        return {"prioritized": None}
-
-    return {
-        "prioritized": prioritized,
-        "total_cost_usd": state.get("total_cost_usd", 0) + cost,
-    }
-
-
-async def synthesize(state: BriefingState) -> dict:
-    """LLM call: write the final markdown briefing."""
-    gateway = LLMGateway()
-    prioritized_data = json.dumps(state.get("prioritized", {}), indent=2, default=str)
-    feedback = state.get("refinement_feedback", "")
-    feedback_block = f"Previous feedback to address:\n{feedback}" if feedback else ""
-
-    try:
-        result = await gateway.call(
-            system=SYNTHESIZE_SYSTEM,
-            user=SYNTHESIZE_USER.format(
-                prioritized_data=prioritized_data,
-                refinement_feedback=feedback_block,
-            ),
-            max_tokens=2048,
-        )
-        cost = result.cost_usd
-    except BudgetExceededError:
-        logger.warning("Budget exceeded during synthesize")
-        return {}
-    except Exception as e:
-        logger.warning("Synthesize failed: {}", str(e))
-        return {}
-
-    return {
-        "briefing_markdown": result.text,
-        "iterations": state.get("iterations", 0) + 1,
-        "total_cost_usd": state.get("total_cost_usd", 0) + cost,
-    }
-
-
-async def self_evaluate(state: BriefingState) -> dict:
-    """LLM call: score the briefing quality 0-1."""
-    gateway = LLMGateway()
-    raw_data = json.dumps(state.get("raw", {}), indent=2, default=str)
-    briefing = state.get("briefing_markdown", "")
-
-    try:
-        result = await gateway.call(
-            system=EVALUATE_SYSTEM,
-            user=EVALUATE_USER.format(raw_data=raw_data, briefing_markdown=briefing),
-            max_tokens=512,
-        )
-        evaluation = _parse_json_safe(result.text)
-        score = evaluation.get("overall", 0.7)
-        feedback = evaluation.get("feedback", "")
-        cost = result.cost_usd
-    except (BudgetExceededError, Exception):
-        score = 0.7
-        feedback = ""
-        cost = 0.0
-
-    return {
-        "quality_score": score,
-        "refinement_feedback": feedback,
-        "total_cost_usd": state.get("total_cost_usd", 0) + cost,
-    }
+#
+# `prioritize`, `synthesize`, `self_evaluate` are now AgentBase subclasses
+# (see briefing/agents.py). The graph builder wraps them in node factories
+# so spans land in `agent_traces`. See briefing/graph.py.
 
 
 async def maybe_refine(state: BriefingState) -> dict:
@@ -275,15 +189,3 @@ async def persist(state: BriefingState) -> dict:
     return {}
 
 
-# --- Helpers ---
-
-def _parse_json_safe(text: str) -> dict:
-    """Parse JSON from LLM output, stripping markdown fences if present."""
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.split("\n")
-        cleaned = "\n".join(lines[1:-1])
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        return {}

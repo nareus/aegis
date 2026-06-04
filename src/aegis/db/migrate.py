@@ -9,18 +9,18 @@ from __future__ import annotations
 
 import asyncio
 import re
-from importlib.resources import files
 
 import asyncpg
 from loguru import logger
 
+from aegis._assets import path as _asset_path
 from aegis.config import settings
 
 _VERSION_RE = re.compile(r"^(\d+)_")
 
 
 def _migration_files() -> list[tuple[int, str, str]]:
-    root = files("aegis._assets").joinpath("migrations")
+    root = _asset_path("migrations")
     entries: list[tuple[int, str, str]] = []
     for entry in root.iterdir():
         name = entry.name

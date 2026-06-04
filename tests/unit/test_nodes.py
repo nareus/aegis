@@ -1,15 +1,17 @@
-"""Tests for individual briefing graph nodes."""
+"""Tests for individual briefing graph nodes.
 
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+LLM nodes (prioritize / synthesize / self_evaluate) are now AgentBase
+subclasses in aegis.briefing.agents; their behavior is covered by the
+AgentBase test surface + briefing integration tests, not here.
+"""
+
+from unittest.mock import AsyncMock, MagicMock
 
 from aegis.briefing.nodes import (
     _fetch_source,
-    check_fetches,
-    route_after_fetches,
-    route_after_evaluate,
     degraded_output,
-    _parse_json_safe,
+    route_after_evaluate,
+    route_after_fetches,
 )
 from aegis.sources.base import SourceResult
 
@@ -98,16 +100,3 @@ async def test_fetch_source_failure():
     assert result["fetch_errors"]["test_source"] == "network error"
 
 
-# --- _parse_json_safe ---
-
-def test_parse_json_safe_plain():
-    assert _parse_json_safe('{"key": "value"}') == {"key": "value"}
-
-
-def test_parse_json_safe_fenced():
-    text = '```json\n{"key": "value"}\n```'
-    assert _parse_json_safe(text) == {"key": "value"}
-
-
-def test_parse_json_safe_invalid():
-    assert _parse_json_safe("not json") == {}
